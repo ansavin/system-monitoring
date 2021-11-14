@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -20,11 +23,29 @@ type DevStats struct {
 	WritePS float64
 }
 
+type FsStats struct {
+	Name               string
+	UsedBytes          uint64
+	UsedStoragePercent float64
+	UsedInodes         uint64
+	UsedInodesPercent  float64
+}
+
 // UNIX sector size
 const SECTOR_SIZE = 512
 
 // num of bytes in KB
 const BYTES_IN_KB = 1000
+
+// prefix for virtual dev (for ex, sysfs) in Linux mountinfo
+const VIRTUAL_DEVICE_TYPE = "0"
+
+func persentage(x, y float64) float64 {
+	if x == 0 {
+		return 0
+	}
+	return 100 * (x - y) / x
+}
 
 func getDevStats() (map[string]DevInfo, error) {
 	res := make(map[string]DevInfo)
@@ -100,6 +121,68 @@ func calcDevStats() ([]DevStats, error) {
 	return res, nil
 }
 
+func parseMounts() ([]string, error) {
+	var tmp, devType, mountPoint string
+	res := make([]string, 0)
+
+	mounts, err := ioutil.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return nil, fmt.Errorf("cannot open /proc/self/mountinfo: %s", err.Error())
+	}
+
+	rows := strings.Split(string(mounts), "\n")
+	for _, row := range rows {
+		_, err := fmt.Sscanf(row, "%s %s %s %s %s", &tmp, &tmp, &devType, &tmp, &mountPoint)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse /proc/self/mountinfo: %s", err.Error())
+		}
+
+		// we check if FS here is not virtual (for ex., sysfs)
+		// we doesn't want to check storage for such a FS
+		if !strings.HasPrefix(devType, VIRTUAL_DEVICE_TYPE) {
+			res = append(res, mountPoint)
+		}
+	}
+	return res, nil
+}
+
+func calcFsUtilisation() ([]FsStats, error) {
+	var stats syscall.Statfs_t
+
+	res := make([]FsStats, 0)
+
+	filesystems, err := parseMounts()
+	if err != nil {
+		return nil, fmt.Errorf("cannot get filesystems: %s", err.Error())
+	}
+
+	for _, fs := range filesystems {
+		fd, err := os.Open(fs)
+
+		if err != nil {
+			fd.Close()
+			return nil, fmt.Errorf("cannot open %s fs: %s", fs, err.Error())
+		}
+		err = syscall.Fstatfs(int(fd.Fd()), &stats)
+		if err != nil {
+			fd.Close()
+			return nil, fmt.Errorf("syscall statfs returns error: %s", err.Error())
+		}
+
+		res = append(res, FsStats{
+			Name:               fs,
+			UsedBytes:          stats.Files - stats.Bfree,
+			UsedStoragePercent: persentage(float64(stats.Blocks), float64(stats.Bfree)),
+			UsedInodes:         stats.Files - stats.Ffree,
+			UsedInodesPercent:  persentage(float64(stats.Files), float64(stats.Ffree)),
+		})
+	}
+	return res, nil
+}
+
 func main() {
 	la, err := ioutil.ReadFile("/proc/loadavg")
 	if err != nil {
@@ -126,6 +209,11 @@ func main() {
 		fmt.Println(err.Error())
 	}
 
+	fsystems, err := calcFsUtilisation()
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
 	tot := (usr + sys + idle) / 100
 	fmt.Println("la:", laOneMin)
 	fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, ide: %.2f%%\n", usr/tot, sys/tot, idle/tot)
@@ -136,6 +224,17 @@ func main() {
 			dev.TransPS,
 			dev.ReadPS/BYTES_IN_KB,
 			dev.WritePS/BYTES_IN_KB,
+		)
+	}
+
+	fmt.Println("Filesystems utilization:")
+	for _, fs := range fsystems {
+		fmt.Printf("Name: %s, Used storage, bytes: %d, Used storage persentage: %.2f%%, Used inodes: %d, Used inodes persentage: %.2f%%\n",
+			fs.Name,
+			fs.UsedBytes,
+			fs.UsedStoragePercent,
+			fs.UsedInodes,
+			fs.UsedInodesPercent,
 		)
 	}
 }
