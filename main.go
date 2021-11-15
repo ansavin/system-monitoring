@@ -31,6 +31,19 @@ type FsStats struct {
 	UsedInodesPercent  float64
 }
 
+type CPUInfo struct {
+	usr  float64
+	sys  float64
+	idle float64
+}
+
+type CPUstats struct {
+	LA              float64
+	usrUsagePercent float64
+	sysUsagePercent float64
+	idlePercent     float64
+}
+
 // UNIX sector size
 const SECTOR_SIZE = 512
 
@@ -39,6 +52,21 @@ const BYTES_IN_KB = 1000
 
 // prefix for virtual dev (for ex, sysfs) in Linux mountinfo
 const VIRTUAL_DEVICE_TYPE = "0"
+
+// procfs file in Linux that shows LA
+const LA_FILE = "/proc/loadavg"
+
+// procfs file in Linux that shows CPU verbose stats
+const CPU_STATS_FILE = "/proc/stat"
+
+// procfs file in Linux that shows mounted filesystems
+const MOUNTINFO_FILE = "/proc/self/mountinfo"
+
+// procfs dir in Linux that shows block devices
+const BLOCK_DEVICES_DIR = "/sys/block"
+
+// file in /sys/block/<dev_name> that shows this device stats
+const DEV_STATS_FILENAME = "stat"
 
 func persentage(x, y float64) float64 {
 	if x == 0 {
@@ -49,14 +77,13 @@ func persentage(x, y float64) float64 {
 
 func getDevStats() (map[string]DevInfo, error) {
 	res := make(map[string]DevInfo)
-	devDir := "/sys/block"
-	devs, err := ioutil.ReadDir(devDir)
+	devs, err := ioutil.ReadDir(BLOCK_DEVICES_DIR)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read /sys/block")
+		return nil, fmt.Errorf("cannot read %s: %s", BLOCK_DEVICES_DIR, err.Error())
 	}
 	for _, d := range devs {
 		name := d.Name()
-		data, err := parseDevStats(name, devDir)
+		data, err := parseDevStats(name, BLOCK_DEVICES_DIR)
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse dev stats: %s", err.Error())
 		}
@@ -68,7 +95,7 @@ func getDevStats() (map[string]DevInfo, error) {
 func parseDevStats(name, basePath string) (DevInfo, error) {
 	var tmp, dscdReq, readReq, readSect, writeReq, writeSect uint64
 
-	path := fmt.Sprintf("%s/%s/stat", basePath, name)
+	path := fmt.Sprintf("%s/%s/%s", basePath, name, DEV_STATS_FILENAME)
 
 	dev, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -125,19 +152,20 @@ func parseMounts() ([]string, error) {
 	var tmp, devType, mountPoint string
 	res := make([]string, 0)
 
-	mounts, err := ioutil.ReadFile("/proc/self/mountinfo")
+	mounts, err := ioutil.ReadFile(MOUNTINFO_FILE)
 	if err != nil {
-		return nil, fmt.Errorf("cannot open /proc/self/mountinfo: %s", err.Error())
+		return nil, fmt.Errorf("cannot open %s: %s", MOUNTINFO_FILE, err.Error())
 	}
 
 	rows := strings.Split(string(mounts), "\n")
 	for _, row := range rows {
+		// in go we cannot skip entry in Sscanf :(
 		_, err := fmt.Sscanf(row, "%s %s %s %s %s", &tmp, &tmp, &devType, &tmp, &mountPoint)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("cannot parse /proc/self/mountinfo: %s", err.Error())
+			return nil, fmt.Errorf("cannot parse %s: %s", MOUNTINFO_FILE, err.Error())
 		}
 
 		// we check if FS here is not virtual (for ex., sysfs)
@@ -183,25 +211,69 @@ func calcFsUtilisation() ([]FsStats, error) {
 	return res, nil
 }
 
+func parseLA() (float64, error) {
+	var la float64
+
+	laStats, err := ioutil.ReadFile(LA_FILE)
+	if err != nil {
+		return 0, fmt.Errorf("cannot read %s: %s", LA_FILE, err.Error())
+	}
+
+	_, err = fmt.Sscanf(string(laStats), "%f", &la)
+	if err != nil {
+		return 0, fmt.Errorf("cannot parse /proc/loadavg: %s", err.Error())
+	}
+
+	return la, nil
+}
+
+func parseCPUStats() (CPUInfo, error) {
+	var usr, sys, idle float64
+	var tmp string
+
+	cpu, err := ioutil.ReadFile(CPU_STATS_FILE)
+	if err != nil {
+		return CPUInfo{}, fmt.Errorf("cannot read %s: %s", CPU_STATS_FILE, err.Error())
+	}
+
+	// in go we cannot skip entry in Sscanf :(
+	_, err = fmt.Sscanf(string(cpu), "%s %f %s %f %f", &tmp, &usr, &tmp, &sys, &idle)
+	if err != nil {
+		return CPUInfo{}, fmt.Errorf("cannot parse %s: %s", CPU_STATS_FILE, err.Error())
+	}
+
+	return CPUInfo{
+		usr:  usr,
+		sys:  sys,
+		idle: idle,
+	}, nil
+}
+
+func calcCPUUsage() (CPUstats, error) {
+	la, err := parseLA()
+	if err != nil {
+		return CPUstats{}, fmt.Errorf("cannot calc cpu la: %s", err.Error())
+	}
+
+	stats, err := parseCPUStats()
+	if err != nil {
+		return CPUstats{}, fmt.Errorf("cannot calc cpu stats: %s", err.Error())
+	}
+
+	tot := (stats.usr + stats.sys + stats.idle) / 100
+
+	return CPUstats{
+		LA:              la,
+		usrUsagePercent: stats.usr / tot,
+		sysUsagePercent: stats.sys / tot,
+		idlePercent:     stats.idle / tot,
+	}, nil
+}
+
 func main() {
-	la, err := ioutil.ReadFile("/proc/loadavg")
+	cpu, err := calcCPUUsage()
 	if err != nil {
-		fmt.Println("cannot read procfs")
-	}
-	laOneMin := strings.Split(string(la), " ")[0]
-
-	cpu, err := ioutil.ReadFile("/proc/stat")
-
-	if err != nil {
-		fmt.Println("cannot read procfs")
-	}
-
-	var usr, sys, idle, tmp float64
-	var temp string
-
-	_, err = fmt.Sscanf(string(cpu), "%s %f %f %f %f", &temp, &usr, &tmp, &sys, &idle)
-	if err != nil {
-		fmt.Println("cannot parse stats")
+		fmt.Println(err.Error())
 	}
 
 	devs, err := calcDevStats()
@@ -214,9 +286,8 @@ func main() {
 		fmt.Println(err.Error())
 	}
 
-	tot := (usr + sys + idle) / 100
-	fmt.Println("la:", laOneMin)
-	fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, ide: %.2f%%\n", usr/tot, sys/tot, idle/tot)
+	fmt.Println("la:", cpu.LA)
+	fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, ide: %.2f%%\n", cpu.usrUsagePercent, cpu.sysUsagePercent, cpu.idlePercent)
 	fmt.Println("Devices statistic:")
 	for _, dev := range devs {
 		fmt.Printf("Name: %s, Transactions per sec: %.3f, Read, Kbps: %.3f, Write, Kbps: %.3f\n",
