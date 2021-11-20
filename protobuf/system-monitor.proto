@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+option go_package = "./protobuf";
+
+package systemMonitor;
+
+service monitor {
+  rpc getStats (StatType) returns (CPUstats) {}
+}
+
+message CPUstats {
+  double la = 1;
+  double usr = 2;
+  double sys = 3;
+  double idle = 4;
+}
+
+message StatType {
+  string type = 1;
+}

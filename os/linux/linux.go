@@ -209,7 +209,7 @@ func CalcFsUtilisation() ([]FsStats, error) {
 
 		res = append(res, FsStats{ //FIXME
 			Name:               fs,
-			UsedBytes:          stats.Files - stats.Bfree,
+			UsedBytes:          (stats.Blocks - stats.Bfree) * uint64(stats.Bsize),
 			UsedStoragePercent: persentage(float64(stats.Blocks), float64(stats.Bfree)),
 			UsedInodes:         stats.Files - stats.Ffree,
 			UsedInodesPercent:  persentage(float64(stats.Files), float64(stats.Ffree)),
