@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
+	"io"
 
 	"protobuf"
 
@@ -20,13 +20,48 @@ func main() {
 	c := protobuf.NewMonitorClient(conn)
 
 	// Contact the server and print out its response.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	r, err := c.GetStats(ctx, &protobuf.StatType{})
+
+	stream, err := c.GetStats(ctx, &protobuf.Settings{})
 	if err != nil {
-		fmt.Println("cannot get stats from server:", err.Error())
+		fmt.Println("cannot open stream:", err.Error())
 	}
 
-	fmt.Println("la:", r.La)
-	fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, ide: %.2f%%\n", r.Usr, r.Sys, r.Idle)
+	for {
+		r, err := stream.Recv()
+		if err == io.EOF {
+			fmt.Println("stream is closed, finishing session")
+			return
+		}
+		if err != nil {
+			fmt.Println("error during streaming:", err.Error())
+			return
+		}
+
+		fmt.Println("CPU statistics:")
+		fmt.Println("la:", r.CPUstats.La)
+		fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, ide: %.2f%%\n", r.CPUstats.Usr, r.CPUstats.Sys, r.CPUstats.Idle)
+
+		fmt.Println("Devices statistic:")
+		for _, dev := range r.DevStats {
+			fmt.Printf("Name: %s, Transactions per sec: %.3f, Read: %.3f Kbps, Write: %.3f Kbps\n",
+				dev.Name,
+				dev.Tps,
+				dev.Read,
+				dev.Write,
+			)
+		}
+
+		fmt.Println("Filesystems utilization:")
+		for _, fs := range r.FsStats {
+			fmt.Printf("Name: %s, Used storage: %d Gb, Used storage persentage: %.2f%%, Used inodes: %d, Used inodes persentage: %.2f%%\n",
+				fs.Name,
+				fs.Bytes,
+				fs.BytesPercent,
+				fs.Inode,
+				fs.InodePercent,
+			)
+		}
+	}
 }

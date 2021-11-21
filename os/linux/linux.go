@@ -16,6 +16,12 @@ type devInfo struct {
 	WriteBytes   uint64
 }
 
+type cpuInfo struct {
+	usr  float64
+	sys  float64
+	idle float64
+}
+
 // DevStats represent block devises stats
 type DevStats struct {
 	Name    string
@@ -27,16 +33,10 @@ type DevStats struct {
 // FsStats represents filesystem stats
 type FsStats struct {
 	Name               string
-	UsedBytes          uint64
+	UsedGBytes         uint64
 	UsedStoragePercent float64
 	UsedInodes         uint64
 	UsedInodesPercent  float64
-}
-
-type cpuInfo struct {
-	usr  float64
-	sys  float64
-	idle float64
 }
 
 // CPUstats represend CPU stats
@@ -50,11 +50,11 @@ type CPUstats struct {
 // SectorSize is UNIX sector size
 const SectorSize = 512
 
-// BytesInKb is num of bytes in KB
-const BytesInKb = 1000
+// BytesInKb is num of bytes in KB, in Linux its still 2^10
+const BytesInKb = 1024
 
-// VirtualDeviceType is prefix for virtual dev (for ex, sysfs) in Linux mountinfo
-const VirtualDeviceType = "0"
+// BytesInGb is num of bytes in GB
+const BytesInGb = 1073741824
 
 // LaFile is procfs file in Linux that shows LA
 const LaFile = "/proc/loadavg"
@@ -63,13 +63,20 @@ const LaFile = "/proc/loadavg"
 const CPUStatsFile = "/proc/stat"
 
 // MountinfoFile is procfs file in Linux that shows mounted filesystems
-const MountinfoFile = "/proc/self/mountinfo"
+const MountinfoFile = "/proc/1/mountinfo"
 
 // BlockDevicesDir is procfs dir in Linux that shows block devices
 const BlockDevicesDir = "/sys/block"
 
 // DevStatsFilename is file in /sys/block/<dev_name> that shows this device stats
 const DevStatsFilename = "stat"
+
+// in docker we mount host root fs to /host
+const prefix = "/host"
+
+// ValidDeviceTypes is prefixes for non-virtual block dev in Linux mountinfo
+// See https://www.kernel.org/doc/Documentation/admin-guide/devices.txt
+var ValidDeviceTypes = []string{"3", "8", "9", "22", "33", "34"}
 
 func persentage(x, y float64) float64 {
 	if x == 0 {
@@ -100,7 +107,7 @@ func parseDevStats(name, basePath string) (devInfo, error) {
 
 	path := fmt.Sprintf("%s/%s/%s", basePath, name, DevStatsFilename)
 
-	dev, err := ioutil.ReadFile(path)
+	dev, err := ioutil.ReadFile(prefix + path)
 	if err != nil {
 		return devInfo{}, fmt.Errorf("cannot read %s: %s", path, err.Error())
 	}
@@ -154,10 +161,10 @@ func CalcDevStats() ([]DevStats, error) {
 }
 
 func parseMounts() ([]string, error) {
-	var tmp, devType, mountPoint string
+	var tmp, devType, rootDentry, mountPoint string
 	res := make([]string, 0)
 
-	mounts, err := ioutil.ReadFile(MountinfoFile)
+	mounts, err := ioutil.ReadFile(prefix + MountinfoFile)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open %s: %s", MountinfoFile, err.Error())
 	}
@@ -165,7 +172,7 @@ func parseMounts() ([]string, error) {
 	rows := strings.Split(string(mounts), "\n")
 	for _, row := range rows {
 		// in go we cannot skip entry in Sscanf :(
-		_, err := fmt.Sscanf(row, "%s %s %s %s %s", &tmp, &tmp, &devType, &tmp, &mountPoint)
+		_, err := fmt.Sscanf(row, "%s %s %s %s %s", &tmp, &tmp, &devType, &rootDentry, &mountPoint)
 		if err == io.EOF {
 			break
 		}
@@ -173,10 +180,18 @@ func parseMounts() ([]string, error) {
 			return nil, fmt.Errorf("cannot parse %s: %s", MountinfoFile, err.Error())
 		}
 
+		// we want to get info only for root mounts
+		if rootDentry != "/" {
+			continue
+		}
+
 		// we check if FS here is not virtual (for ex., sysfs)
 		// we doesn't want to check storage for such a FS
-		if !strings.HasPrefix(devType, VirtualDeviceType) {
-			res = append(res, mountPoint)
+		for _, prefix := range ValidDeviceTypes {
+			if strings.HasPrefix(devType, prefix+":") {
+				res = append(res, mountPoint)
+				break
+			}
 		}
 	}
 	return res, nil
@@ -195,7 +210,7 @@ func CalcFsUtilisation() ([]FsStats, error) {
 	}
 
 	for _, fs := range filesystems {
-		fd, err := os.Open(fs)
+		fd, err := os.Open(prefix + fs)
 
 		if err != nil {
 			fd.Close()
@@ -209,7 +224,7 @@ func CalcFsUtilisation() ([]FsStats, error) {
 
 		res = append(res, FsStats{ //FIXME
 			Name:               fs,
-			UsedBytes:          (stats.Blocks - stats.Bfree) * uint64(stats.Bsize),
+			UsedGBytes:         (stats.Blocks - stats.Bfree) * uint64(stats.Bsize) / BytesInGb,
 			UsedStoragePercent: persentage(float64(stats.Blocks), float64(stats.Bfree)),
 			UsedInodes:         stats.Files - stats.Ffree,
 			UsedInodesPercent:  persentage(float64(stats.Files), float64(stats.Ffree)),
@@ -221,7 +236,7 @@ func CalcFsUtilisation() ([]FsStats, error) {
 func parseLA() (float64, error) {
 	var la float64
 
-	laStats, err := ioutil.ReadFile(LaFile)
+	laStats, err := ioutil.ReadFile(prefix + LaFile)
 	if err != nil {
 		return 0, fmt.Errorf("cannot read %s: %s", LaFile, err.Error())
 	}
@@ -238,7 +253,7 @@ func parseCPUStats() (cpuInfo, error) {
 	var usr, sys, idle float64
 	var tmp string
 
-	cpu, err := ioutil.ReadFile(CPUStatsFile)
+	cpu, err := ioutil.ReadFile(prefix + CPUStatsFile)
 	if err != nil {
 		return cpuInfo{}, fmt.Errorf("cannot read %s: %s", CPUStatsFile, err.Error())
 	}
