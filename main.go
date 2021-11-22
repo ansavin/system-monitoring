@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
-	"os/linux"
+	"oslayer"
 	"time"
 
 	"protobuf"
@@ -20,17 +20,17 @@ type server struct {
 // getStats implements protobuf.MonitorServer
 func (s *server) GetStats(_ *protobuf.Settings, srv protobuf.Monitor_GetStatsServer) error {
 	for {
-		cpu, err := linux.CalcCPUUsage()
+		cpu, err := oslayer.CalcCPUUsage()
 		if err != nil {
 			return status.Errorf(codes.Aborted, "server error: %s", err.Error())
 		}
 
-		devs, err := linux.CalcDevStats()
+		devs, err := oslayer.CalcDevStats()
 		if err != nil {
 			return status.Errorf(codes.Aborted, "server error: %s", err.Error())
 		}
 
-		fsystems, err := linux.CalcFsUtilisation()
+		fsystems, err := oslayer.CalcFsUtilisation()
 		if err != nil {
 			return status.Errorf(codes.Aborted, "server error: %s", err.Error())
 		}
