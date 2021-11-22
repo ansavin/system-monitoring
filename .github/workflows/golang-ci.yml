@@ -27,5 +27,3 @@ jobs:
     
       - name: Run golang tests
         run: go test -v ./os/linux
-        with:
-          github_token: ${{ secrets.github_token }}
