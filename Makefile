@@ -1,9 +1,22 @@
+GO := $(shell which go)
+
+.PHONY: test
+test:
+	sudo $(GO) test oslayer -race -count 10
+
+grpc-server:
+	$(GO) build -o grpc-server
+
+grpc-client:
+	cd client && \
+	$(GO) build -o ../grpc-client
+
 .PHONY: all
-all:
+docker:
 	docker build -t system-monitor .
 
-.PHONY: run
-run: all
+.PHONY: docker-run
+docker-run: docker
 	docker rm system-monitor; \
 	docker run \
 	--net="host" \
@@ -12,8 +25,8 @@ run: all
 	--name system-monitor \
 	system-monitor
 
-.PHONY: test
-test: all
+.PHONY: docker-test
+docker-test: docker
 	docker rm system-monitor-test; \
 	docker run \
 	--net="host" \
@@ -25,4 +38,6 @@ test: all
 
 .PHONY: clean
 clean:
-	docker rm system-monitor; docker rm system-monitor-test; docker rmi system-monitor
+	docker rm system-monitor 1>/dev/null 2>&1
+	docker rm system-monitor-test 1>/dev/null 2>&1
+	docker rmi system-monitor 1>/dev/null 2>&1

@@ -81,6 +81,7 @@ func main() {
 	lis, err := net.Listen("tcp", "localhost:8088")
 	if err != nil {
 		fmt.Println("cannot listen TCP:", err.Error())
+		return
 	}
 	s := grpc.NewServer()
 	protobuf.RegisterMonitorServer(s, &server{})
