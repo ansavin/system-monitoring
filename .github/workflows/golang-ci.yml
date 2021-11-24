@@ -26,7 +26,7 @@ jobs:
         uses: actions/setup-go@v2
 
       - name: Run golang tests
-        run: sudo go test oslayer
+        run: sudo go test -race -count 10 oslayer
 
   darwin-test:
     name: runner / darwin-test
@@ -39,7 +39,7 @@ jobs:
         uses: actions/setup-go@v2
     
       - name: Run golang tests
-        run: go test oslayer
+        run: go test -race -count 10 oslayer
 
   inegrational-test:
     name: runner / inegrational-test
