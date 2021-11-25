@@ -28,8 +28,8 @@ jobs:
       - name: Run golang tests
         run: sudo go test -race -count 10 oslayer
 
-  ubuntu-18.04-test:
-    name: runner / ubuntu-18.04-test
+  ubuntu-1804-test:
+    name: runner / ubuntu-1804-test
     runs-on: ubuntu-18.04
     steps:
       - name: Check out code into the Go module directory
@@ -67,8 +67,8 @@ jobs:
       - name: Run integrational tests
         run: ./integration-test.sh
 
-  integration-test-ubuntu-18.04:
-    name: runner / integration-test-ubuntu-18.04
+  integration-test-ubuntu-1804:
+    name: runner / integration-test-ubuntu-1804
     runs-on: ubuntu-18.04
     steps:
       - name: Check out code into the Go module directory
