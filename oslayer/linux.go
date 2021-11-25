@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -19,6 +20,10 @@ type devInfo struct {
 	ReadBytes    uint64
 	WriteBytes   uint64
 }
+
+// SamplingTime is time interval used for calculating some
+// statistics. We cant send client statistics with hier granularity
+const SamplingTime = time.Second
 
 // SectorSize is UNIX sector size
 const SectorSize = 512
@@ -86,6 +91,9 @@ func getDevStats() (map[string]devInfo, error) {
 	}
 	for _, d := range devs {
 		name := d.Name()
+		if strings.HasPrefix(name, "loop") {
+			continue
+		}
 		data, err := parseDevStats(name, BlockDevicesDir)
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse dev stats: %s", err.Error())
@@ -134,7 +142,7 @@ func CalcDevStats() ([]DevStats, error) {
 		return nil, fmt.Errorf("cannot get dev snapshot #1: %s", err.Error())
 	}
 
-	time.Sleep(1 * time.Second) //FIXME
+	time.Sleep(SamplingTime)
 
 	devSecondSnapshot, err := getDevStats()
 	if err != nil {
@@ -152,6 +160,10 @@ func CalcDevStats() ([]DevStats, error) {
 			WritePS: (float64(stats.WriteBytes) - float64(devFirstSnapshot[name].WriteBytes)) / BytesInKb,
 		})
 	}
+	sort.Slice(res[:], func(i, j int) bool {
+		return strings.Compare(res[i].Name, res[j].Name) > 0
+	})
+
 	return res, nil
 }
 

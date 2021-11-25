@@ -1,43 +1,54 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
 CODE=1
 
-if [ `whoami` != 'root' ]
-    then
-        echo 'This script must be executed by root'
-        exit $CODE
-fi
+CLNT_LOG_FILE=$(mktemp)
+SRV_LOG_FILE=$(mktemp)
 
-make grpc-server
+WAIT_TIME=5
 
-make grpc-client
+make grpc-server 1>/dev/null 2>&1
 
-./grpc-server &
+sudo chown 0:0 ./grpc-server
+sudo chmod u+s ./grpc-server
+
+make grpc-client 1>/dev/null 2>&1
+
+./grpc-server 1> $SRV_LOG_FILE 2>&1 &
 
 SRV_PID=$!
 
 sleep 1
 
-./grpc-client > /tmp/testfile &
+./grpc-client $WAIT_TIME 1 1> $CLNT_LOG_FILE 2>&1 &
 
 CLNT_PID=$!
 
-sleep 5 #FIXME
+sleep $WAIT_TIME #FIXME
 
-if grep -q 'CPU statistics:' /tmp/testfile
-    then 
-        echo 'Test passed'
-        CODE=0
-    else
-        echo 'Test failed: no expected words "CPU statistics:" found in client`s output'
-        echo 'Client output:'
-        cat /tmp/testfile
+if  grep -q 'CPU statistics:' $CLNT_LOG_FILE && \
+    grep -vEq 'error|cannot|panic' $CLNT_LOG_FILE && \
+    grep -vEq 'error|cannot|panic' $SRV_LOG_FILE
+then 
+    echo 'Test passed'
+    CODE=0
+else
+    echo 'Test failed: no expected words "CPU statistics:" found in client`s output'
+    echo 'Client output:'
+    cat $CLNT_LOG_FILE
+    cat $SRV_LOG_FILE
 fi
 
-kill $SRV_PID
+make clean 1>/dev/null 2>&1
 
-kill $CLNT_PID
+kill $SRV_PID $CLNT_PID
+KILL_CODE=$?
 
-rm /tmp/testfile
+rm $CLNT_LOG_FILE
+rm $SRV_LOG_FILE
 
+if [ $KILL_CODE != 0 ]
+then
+    exit $KILL_CODE
+fi
 exit $CODE

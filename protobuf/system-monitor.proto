@@ -36,4 +36,7 @@ message Stats {
   repeated FsStats FsStats = 3;
 }
 
-message Settings {}
+message Settings {
+  uint32 timeBetweenTicks = 1;
+  uint32 averagingTime = 2;
+}
