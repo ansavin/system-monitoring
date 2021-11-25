@@ -57,76 +57,74 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 	// clientData = 1, 2, 3, ... <- for client who wants data for 1 sec
 	// anotherClientData = (2 + 1) / 2, (3 + 2) / 2, ... <- for client
 	// who wants data for 2 sec
-	s.once[0].Do(
+	statsCalcFunctions := []func(){
 		func() {
-			go startPeriodicalSampling(s.ctx, func() {
-				cpu, err := oslayer.CalcCPUUsage()
-				if err != nil {
-					s.lastError = err
-					s.cancel()
-				}
+			cpu, err := oslayer.CalcCPUUsage()
+			if err != nil {
+				s.lastError = err
+				s.cancel()
+			}
 
-				// we have no generic in go, so we cant move this to a func
-				// without overengineering
-				if len(s.cpuStatsSamples) == maxSamples {
-					s.cpuStatsSamples = s.cpuStatsSamples[1:]
-				}
-				s.cpuStatsSamples = append(s.cpuStatsSamples, cpu)
+			// here we want to preserve only maxSamples elements in slices
+			// we have no generic in go, so we cant move this to a func
+			// without overengineering
+			if len(s.cpuStatsSamples) == maxSamples {
+				s.cpuStatsSamples = s.cpuStatsSamples[1:]
+			}
+			s.cpuStatsSamples = append(s.cpuStatsSamples, cpu)
 
-				time.Sleep(oslayer.SamplingTime)
-			})
+			time.Sleep(oslayer.SamplingTime)
 		},
-	)
-	s.once[1].Do(
 		func() {
-			go startPeriodicalSampling(s.ctx, func() {
-				devs, err := oslayer.CalcDevStats()
-				if err != nil {
-					s.lastError = err
-					s.cancel()
-				}
+			devs, err := oslayer.CalcDevStats()
+			if err != nil {
+				s.lastError = err
+				s.cancel()
+			}
 
-				// we have no generic in go, so we cant move this to a func
-				// without overengineering
-				if len(s.devStatsSamples) == maxSamples {
-					s.devStatsSamples = s.devStatsSamples[1:]
-				}
-				s.devStatsSamples = append(s.devStatsSamples, devs)
-				// we doesn`t need to sleep here - CalcDevStats use the same SamplingTime
-				// for collecting stats
-			})
+			// here we want to preserve only maxSamples elements in slices
+			// we have no generic in go, so we cant move this to a func
+			// without overengineering
+			if len(s.devStatsSamples) == maxSamples {
+				s.devStatsSamples = s.devStatsSamples[1:]
+			}
+			s.devStatsSamples = append(s.devStatsSamples, devs)
+			// we doesn`t need to sleep here - CalcDevStats use the same SamplingTime
+			// for collecting stats
 		},
-	)
-	s.once[2].Do(
 		func() {
-			go startPeriodicalSampling(s.ctx, func() {
-				fsystems, err := oslayer.CalcFsUtilization()
-				if err != nil {
-					s.lastError = err
-					s.cancel()
-				}
-
-				// we have no generic in go, so we cant move this to a func
-				// without overengineering
-				if len(s.fsStatsSamples) == maxSamples {
-					s.fsStatsSamples = s.fsStatsSamples[1:]
-				}
-				s.fsStatsSamples = append(s.fsStatsSamples, fsystems)
-
-				time.Sleep(oslayer.SamplingTime)
-			})
+			fsystems, err := oslayer.CalcFsUtilization()
+			if err != nil {
+				s.lastError = err
+				s.cancel()
+			}
+			// we have no generic in go, so we cant move this to a func
+			// without overengineering
+			if len(s.fsStatsSamples) == maxSamples {
+				s.fsStatsSamples = s.fsStatsSamples[1:]
+			}
+			s.fsStatsSamples = append(s.fsStatsSamples, fsystems)
 		},
-	)
+	}
+
+	// statistics is calculated in separate goroutines and stored in slices
+	for idx, f := range statsCalcFunctions {
+		s.once[idx].Do(func() {
+			go startPeriodicalSampling(s.ctx, f)
+		})
+	}
 
 	for {
 		select {
 		case <-s.ctx.Done():
-			return status.Errorf(codes.Aborted, "collecting statistics error: %s", s.lastError.Error())
+			return status.Errorf(codes.Internal, "collecting statistics error: %s", s.lastError.Error())
 		default:
+			// we should wait till enough data will be collected
 			for int(settings.AveragingTime) > (len(s.cpuStatsSamples)) {
 				time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.cpuStatsSamples)) * time.Second)
 			}
 
+			// averaging our data for client according to his settings
 			start := len(s.cpuStatsSamples) - (int(settings.AveragingTime))
 			cpuStats := protobuf.CPUstats{}
 
@@ -148,72 +146,73 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 			// defensive programming: we assume slices are filled almost simultaneously
 			// but despiting that fact, we will check if slice is ok before working
 			for int(settings.AveragingTime) > (len(s.devStatsSamples)) {
-				fmt.Println("len s.devStatsSamples", len(s.devStatsSamples))
 				time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.devStatsSamples)) * time.Second)
 			}
 
-			fmt.Println("cpu, dev", len(s.cpuStatsSamples), len(s.devStatsSamples))
 			start = len(s.devStatsSamples) - (int(settings.AveragingTime))
 
+			// here we definitely should have enough data
 			if len(s.devStatsSamples[start:]) < int(settings.AveragingTime) {
-				return status.Errorf(codes.Aborted, "sending message error: device statistics corrupted")
+				s.cancel()
+				return status.Errorf(codes.DataLoss, "sending message error: device statistics corrupted")
 			}
 
+			// averaging our data for client according to his settings
 			// limitation: we assume device number is constant. If not, there might be an error there
 			for devIdx, dev := range s.devStatsSamples[0] {
-				fmt.Println("devIdx, devName", devIdx, dev.Name)
 				devStats := protobuf.DevStats{
 					Name: dev.Name,
 				}
 
-				for idx, sample := range s.devStatsSamples[start:] {
+				for _, sample := range s.devStatsSamples[start:] {
 
 					spl := sample[devIdx]
-					fmt.Println("idx, spl.Name", idx, spl.Name)
+
+					// we assume devices order is always the same, otherwise this won`t work
 					if devStats.Name != spl.Name {
-						return status.Errorf(codes.Aborted, "sending message error: mixing different devices stats")
+						s.cancel()
+						return status.Errorf(codes.DataLoss, "sending message error: mixing different devices stats")
 					}
 
 					devStats.Tps += spl.TransPS
 					devStats.Read += spl.ReadPS
 					devStats.Write += spl.WritePS
 				}
-				fmt.Println("devStats.Tps, devStats.Read, devStats.Write", devStats.Tps, devStats.Read, devStats.Write)
 
 				devStats.Tps /= float64(settings.AveragingTime)
 				devStats.Read /= float64(settings.AveragingTime)
 				devStats.Write /= float64(settings.AveragingTime)
-				fmt.Println("devStats.Tps, devStats.Read, devStats.Write", devStats.Tps, devStats.Read, devStats.Write)
 
 				stats.DevStats = append(stats.DevStats, &devStats)
 			}
-
 			// defensive programming: we assume slices are filled almost simultaneously
 			// but despiting that fact, we will check if slice is ok before working
 			for int(settings.AveragingTime) > (len(s.fsStatsSamples)) {
-				fmt.Println("len s.fsStatsSamples", len(s.fsStatsSamples))
 				time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.fsStatsSamples)) * time.Second)
 			}
 
 			start = len(s.fsStatsSamples) - (int(settings.AveragingTime))
 
+			// here we definitely should have enough data
 			if len(s.fsStatsSamples[start:]) < int(settings.AveragingTime) {
-				return status.Errorf(codes.Aborted, "sending message error: fs statistics corrupted")
+				s.cancel()
+				return status.Errorf(codes.DataLoss, "sending message error: fs statistics corrupted")
 			}
-
+			// averaging our data for client according to his settings
 			// limitation: we assume device number is constant. If not, there might be an error there
 			for devIdx, dev := range s.fsStatsSamples[0] {
-				fmt.Println("devIdx, devName", devIdx, dev.Name)
 				fsStats := protobuf.FsStats{
 					Name: dev.Name,
 				}
 
-				for idx, sample := range s.fsStatsSamples[start:] {
+				for _, sample := range s.fsStatsSamples[start:] {
 
 					spl := sample[devIdx]
-					fmt.Println("idx, spl.Name", idx, spl.Name)
+
+					// we assume fs order is always the same, otherwise this won`t work
 					if fsStats.Name != spl.Name {
-						return status.Errorf(codes.Aborted, "sending message error: mixing different devices stats")
+						s.cancel()
+						return status.Errorf(codes.DataLoss, "sending message error: mixing different devices stats")
 					}
 
 					fsStats.Bytes += spl.UsedGBytes
@@ -221,20 +220,18 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 					fsStats.Inode += spl.UsedInodes
 					fsStats.InodePercent += spl.UsedInodesPercent
 				}
-				fmt.Println("fsStats.Tps, fsStats.Read, fsStats.Write", fsStats.Bytes, fsStats.BytesPercent, fsStats.Inode, fsStats.InodePercent)
 
 				fsStats.Bytes /= float64(settings.AveragingTime)
 				fsStats.BytesPercent /= float64(settings.AveragingTime)
 				fsStats.Inode /= float64(settings.AveragingTime)
 				fsStats.InodePercent /= float64(settings.AveragingTime)
 
-				fmt.Println("fsStats.Tps, fsStats.Read, fsStats.Write", fsStats.Bytes, fsStats.BytesPercent, fsStats.Inode, fsStats.InodePercent)
-
 				stats.FsStats = append(stats.FsStats, &fsStats)
 			}
 
 			if err := srv.Send(&stats); err != nil {
-				return status.Errorf(codes.Aborted, "sending message error: %s", err.Error())
+				s.cancel()
+				return status.Errorf(codes.Internal, "sending message error: %s", err.Error())
 			}
 			time.Sleep(time.Duration(settings.TimeBetweenTicks) * time.Second)
 		}
@@ -265,6 +262,7 @@ func main() {
 	fmt.Println("server listening at", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		fmt.Println("cannot handle request:", err.Error())
+		cancel()
 		return
 	}
 }

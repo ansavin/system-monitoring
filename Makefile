@@ -28,8 +28,8 @@ docker:
 
 .PHONY: docker-run
 docker-run: docker
-	docker rm system-monitor; \
 	docker run \
+	--rm \
 	--net="host" \
 	--pid="host" \
 	-v "/:/host:ro,rslave" \
@@ -38,14 +38,14 @@ docker-run: docker
 
 .PHONY: docker-test
 docker-test: docker
-	docker rm system-monitor-test; \
 	docker run \
+	--rm \
 	--net="host" \
 	--pid="host" \
 	--entrypoint="go" \
 	-v "/:/host:ro,rslave" \
 	--name system-monitor-test \
-	system-monitor test os/linux
+	system-monitor test oslayer
 
 .PHONY: clean
 clean:

@@ -36,6 +36,7 @@ else
     echo 'Test failed: no expected words "CPU statistics:" found in client`s output'
     echo 'Client output:'
     cat $CLNT_LOG_FILE
+    echo 'Sevrer output:'
     cat $SRV_LOG_FILE
 fi
 
