@@ -189,17 +189,50 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 				stats.DevStats = append(stats.DevStats, &devStats)
 			}
 
-			// for _, fs := range fsystems {
-			// 	fsStats := protobuf.FsStats{
-			// 		Name:         fs.Name,
-			// 		Bytes:        fs.UsedGBytes,
-			// 		BytesPercent: fs.UsedStoragePercent,
-			// 		Inode:        fs.UsedInodes,
-			// 		InodePercent: fs.UsedInodesPercent,
-			// 	}
+			// defencive programming: we assume slices are filled almost simultaneously
+			// but despiting that fact, we will check if slice is ok before working
+			for int(settings.AveragingTime) > (len(s.fsStatsSamples)) {
+				fmt.Println("len s.fsStatsSamples", len(s.fsStatsSamples))
+				time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.fsStatsSamples)) * time.Second)
+			}
 
-			// 	stats.FsStats = append(stats.FsStats, &fsStats)
-			// }
+			start = len(s.fsStatsSamples) - (int(settings.AveragingTime))
+
+			if len(s.fsStatsSamples[start:]) < int(settings.AveragingTime) {
+				return status.Errorf(codes.Aborted, "sending message error: fs statistics corrupted")
+			}
+
+			// limitation: we assume device number is constant. If not, there might be an error there
+			for devIdx, dev := range s.fsStatsSamples[0] {
+				fmt.Println("devIdx, devName", devIdx, dev.Name)
+				fsStats := protobuf.FsStats{
+					Name: dev.Name,
+				}
+
+				for idx, sample := range s.fsStatsSamples[start:] {
+
+					spl := sample[devIdx]
+					fmt.Println("idx, spl.Name", idx, spl.Name)
+					if fsStats.Name != spl.Name {
+						return status.Errorf(codes.Aborted, "sending message error: mixing different devices stats")
+					}
+
+					fsStats.Bytes += spl.UsedGBytes
+					fsStats.BytesPercent += spl.UsedStoragePercent
+					fsStats.Inode += spl.UsedInodes
+					fsStats.InodePercent += spl.UsedInodesPercent
+				}
+				fmt.Println("fsStats.Tps, fsStats.Read, fsStats.Write", fsStats.Bytes, fsStats.BytesPercent, fsStats.Inode, fsStats.InodePercent)
+
+				fsStats.Bytes /= float64(settings.AveragingTime)
+				fsStats.BytesPercent /= float64(settings.AveragingTime)
+				fsStats.Inode /= float64(settings.AveragingTime)
+				fsStats.InodePercent /= float64(settings.AveragingTime)
+
+				fmt.Println("fsStats.Tps, fsStats.Read, fsStats.Write", fsStats.Bytes, fsStats.BytesPercent, fsStats.Inode, fsStats.InodePercent)
+
+				stats.FsStats = append(stats.FsStats, &fsStats)
+			}
 
 			if err := srv.Send(&stats); err != nil {
 				return status.Errorf(codes.Aborted, "sending message error: %s", err.Error())

@@ -64,7 +64,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
 
-      - name: Run integrational tests
+      - name: Run integration tests
         run: ./integration-test.sh
 
   integration-test-ubuntu-1804:
@@ -77,7 +77,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
 
-      - name: Run integrational tests
+      - name: Run integration tests
         run: ./integration-test.sh
   
   integration-test-darwin:
@@ -90,5 +90,5 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
 
-      - name: Run integrational tests
+      - name: Run integration tests
         run: ./integration-test.sh

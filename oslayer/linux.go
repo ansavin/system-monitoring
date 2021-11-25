@@ -21,10 +21,6 @@ type devInfo struct {
 	WriteBytes   uint64
 }
 
-// SamplingTime is time interval used for calculating some
-// statistics. We cant send client statistics with hier granularity
-const SamplingTime = time.Second
-
 // SectorSize is UNIX sector size
 const SectorSize = 512
 
@@ -160,6 +156,7 @@ func CalcDevStats() ([]DevStats, error) {
 			WritePS: (float64(stats.WriteBytes) - float64(devFirstSnapshot[name].WriteBytes)) / BytesInKb,
 		})
 	}
+
 	sort.Slice(res[:], func(i, j int) bool {
 		return strings.Compare(res[i].Name, res[j].Name) > 0
 	})
@@ -233,14 +230,20 @@ func CalcFsUtilisation() ([]FsStats, error) {
 			return nil, fmt.Errorf("syscall statfs returns error: %s", err.Error())
 		}
 
-		res = append(res, FsStats{ //FIXME
+		res = append(res, FsStats{
 			Name:               fs,
-			UsedGBytes:         (stats.Blocks - stats.Bfree) * uint64(stats.Bsize) / BytesInGb,
+			UsedGBytes:         float64(stats.Blocks-stats.Bfree) * float64(stats.Bsize) / BytesInGb,
 			UsedStoragePercent: percentage(float64(stats.Blocks), float64(stats.Bfree)),
-			UsedInodes:         stats.Files - stats.Ffree,
+			UsedInodes:         float64(stats.Files - stats.Ffree),
 			UsedInodesPercent:  percentage(float64(stats.Files), float64(stats.Ffree)),
 		})
+
 	}
+
+	sort.Slice(res[:], func(i, j int) bool {
+		return strings.Compare(res[i].Name, res[j].Name) > 0
+	})
+
 	return res, nil
 }
 

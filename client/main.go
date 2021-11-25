@@ -77,7 +77,7 @@ func main() {
 
 		fmt.Println("Filesystems utilization:")
 		for _, fs := range r.FsStats {
-			fmt.Printf("Name: %s, Used storage: %d Gb, Used storage persentage: %.2f%%, Used inodes: %d, Used inodes persentage: %.2f%%\n",
+			fmt.Printf("Name: %s, Used storage: %.3f Gb, Used storage persentage: %.2f%%, Used inodes: %.0f, Used inodes persentage: %.2f%%\n",
 				fs.Name,
 				fs.Bytes,
 				fs.BytesPercent,

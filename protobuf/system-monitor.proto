@@ -24,9 +24,9 @@ message DevStats {
 
 message FsStats {
 	string name = 1; 
-	uint64 bytes = 2; 
+	double bytes = 2; 
 	double bytesPercent = 3; 
-	uint64 inode = 4; 
+	double inode = 4; 
 	double inodePercent = 5;
 }
 

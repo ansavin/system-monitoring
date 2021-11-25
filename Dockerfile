@@ -8,8 +8,8 @@ COPY client/go.mod ./client/
 COPY client/go.sum ./client/
 COPY protobuf/go.mod ./protobuf/
 COPY protobuf/go.sum ./protobuf/
-COPY os/linux/go.mod ./os/linux/
-COPY os/linux/go.sum ./os/linux/
+COPY oslayer/go.mod ./oslayer/
+COPY oslayer/go.sum ./oslayer/
 RUN go mod download
 
 COPY . ./

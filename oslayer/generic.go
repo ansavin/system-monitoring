@@ -1,5 +1,7 @@
 package oslayer
 
+import "time"
+
 type cpuInfo struct {
 	usr  float64
 	sys  float64
@@ -25,8 +27,12 @@ type DevStats struct {
 // FsStats represents filesystem stats
 type FsStats struct {
 	Name               string
-	UsedGBytes         uint64
+	UsedGBytes         float64
 	UsedStoragePercent float64
-	UsedInodes         uint64
+	UsedInodes         float64
 	UsedInodesPercent  float64
 }
+
+// SamplingTime is time interval used for calculating some
+// statistics. We cant send client statistics with hier granularity
+const SamplingTime = time.Second
