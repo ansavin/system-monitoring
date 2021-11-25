@@ -34,5 +34,5 @@ type FsStats struct {
 }
 
 // SamplingTime is time interval used for calculating some
-// statistics. We cant send client statistics with hier granularity
+// statistics. We cant send client statistics with higher granularity
 const SamplingTime = time.Second

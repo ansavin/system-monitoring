@@ -30,7 +30,6 @@ type server struct {
 }
 
 func startPeriodicalSampling(ctx context.Context, f func()) {
-	fmt.Printf("goroutine satrted with func %#v\n", f)
 	for {
 		select {
 		case <-ctx.Done():
@@ -68,7 +67,7 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 				}
 
 				// we have no generic in go, so we cant move this to a func
-				// wuthout overengeneering
+				// without overengineering
 				if len(s.cpuStatsSamples) == maxSamples {
 					s.cpuStatsSamples = s.cpuStatsSamples[1:]
 				}
@@ -88,7 +87,7 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 				}
 
 				// we have no generic in go, so we cant move this to a func
-				// wuthout overengeneering
+				// without overengineering
 				if len(s.devStatsSamples) == maxSamples {
 					s.devStatsSamples = s.devStatsSamples[1:]
 				}
@@ -101,14 +100,14 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 	s.once[2].Do(
 		func() {
 			go startPeriodicalSampling(s.ctx, func() {
-				fsystems, err := oslayer.CalcFsUtilisation()
+				fsystems, err := oslayer.CalcFsUtilization()
 				if err != nil {
 					s.lastError = err
 					s.cancel()
 				}
 
 				// we have no generic in go, so we cant move this to a func
-				// wuthout overengeneering
+				// without overengineering
 				if len(s.fsStatsSamples) == maxSamples {
 					s.fsStatsSamples = s.fsStatsSamples[1:]
 				}
@@ -146,7 +145,7 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 				CPUstats: &cpuStats,
 			}
 
-			// defencive programming: we assume slices are filled almost simultaneously
+			// defensive programming: we assume slices are filled almost simultaneously
 			// but despiting that fact, we will check if slice is ok before working
 			for int(settings.AveragingTime) > (len(s.devStatsSamples)) {
 				fmt.Println("len s.devStatsSamples", len(s.devStatsSamples))
@@ -189,7 +188,7 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 				stats.DevStats = append(stats.DevStats, &devStats)
 			}
 
-			// defencive programming: we assume slices are filled almost simultaneously
+			// defensive programming: we assume slices are filled almost simultaneously
 			// but despiting that fact, we will check if slice is ok before working
 			for int(settings.AveragingTime) > (len(s.fsStatsSamples)) {
 				fmt.Println("len s.fsStatsSamples", len(s.fsStatsSamples))

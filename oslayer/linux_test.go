@@ -37,8 +37,8 @@ func TestPercentage(t *testing.T) {
 }
 
 func TestCheckIfRunsInDocker(t *testing.T) {
-	t.Run("simple postitve test", func(t *testing.T) {
-		// path that definately exist in linux
+	t.Run("simple positive test", func(t *testing.T) {
+		// path that definitely exist in linux
 		tmp := dockerRootFSPrefix
 		dockerRootFSPrefix = "/proc"
 		defer func() { dockerRootFSPrefix = tmp }()
@@ -62,7 +62,7 @@ func TestCheckIfRunsInDocker(t *testing.T) {
 // unless we would mock sysfs & procfs filesystem
 
 func TestParseDevStats(t *testing.T) {
-	t.Run("simple postitve test", func(t *testing.T) {
+	t.Run("simple positive test", func(t *testing.T) {
 		devs, err := ioutil.ReadDir(checkIfRunsInDocker() + BlockDevicesDir)
 		require.NoError(t, err)
 		for _, d := range devs {
@@ -118,9 +118,9 @@ func TestCalcDevStats(t *testing.T) {
 	})
 }
 
-func TestCalcFsUtilisation(t *testing.T) {
+func TestCalcFsUtilization(t *testing.T) {
 	t.Run("simple positive test", func(t *testing.T) {
-		data, err := CalcFsUtilisation()
+		data, err := CalcFsUtilization()
 		// FIXME cannot open /boot/efi fs: open /boot/efi: permission denied
 		// when not in docker
 
@@ -133,7 +133,7 @@ func TestCalcFsUtilisation(t *testing.T) {
 		dockerRootFSPrefix = "/proc"
 		defer func() { dockerRootFSPrefix = tmp }()
 
-		_, err := CalcFsUtilisation()
+		_, err := CalcFsUtilization()
 
 		require.Error(t, err)
 	})
@@ -143,7 +143,7 @@ func TestCalcFsUtilisation(t *testing.T) {
 		MountinfoFile = "/path/to/nowhere"
 		defer func() { MountinfoFile = tmp }()
 
-		_, err := CalcFsUtilisation()
+		_, err := CalcFsUtilization()
 
 		require.Error(t, err)
 	})

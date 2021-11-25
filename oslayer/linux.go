@@ -203,9 +203,9 @@ func parseMounts() ([]string, error) {
 	return res, nil
 }
 
-// CalcFsUtilisation return storage & inodes utilisation for all
+// CalcFsUtilization return storage & inodes Utilization for all
 // mounted non-virtual (like procfs) filesystems
-func CalcFsUtilisation() ([]FsStats, error) {
+func CalcFsUtilization() ([]FsStats, error) {
 	var stats syscall.Statfs_t
 
 	res := make([]FsStats, 0)

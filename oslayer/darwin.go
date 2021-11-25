@@ -81,6 +81,6 @@ func CalcDevStats() ([]DevStats, error) {
 }
 
 // Not implemented yet
-func CalcFsUtilisation() ([]FsStats, error) {
+func CalcFsUtilization() ([]FsStats, error) {
 	return nil, nil
 }

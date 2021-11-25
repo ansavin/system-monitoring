@@ -15,7 +15,6 @@ import (
 func main() {
 	args := os.Args
 
-	// running
 	if len(args) < 3 {
 		fmt.Println("usage: ./grpc-server <time_between_messages_in_sec> <time_for_stats_averaging_is_sec>")
 		return
@@ -24,21 +23,23 @@ func main() {
 	timeBetweenTicks, err := strconv.Atoi(args[1])
 	if err != nil || timeBetweenTicks <= 0 {
 		fmt.Println("expected integer > 0 as 1-d argument, got", args[1])
+		return
 	}
 	averagingTime, err := strconv.Atoi(args[2])
 	if err != nil || averagingTime <= 0 {
 		fmt.Println("expected integer > 0 as 2-d argument, got", args[2])
+		return
 	}
 
-	// Set up a connection to the server.
+	// changing port for startup is nit supported yet
 	conn, err := grpc.Dial("localhost:8088", grpc.WithInsecure())
 	if err != nil {
 		fmt.Println("cannot connect to gRPC server:", err.Error())
+		return
 	}
 	defer conn.Close()
 	c := protobuf.NewMonitorClient(conn)
 
-	// Contact the server and print out its response.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -48,6 +49,7 @@ func main() {
 	})
 	if err != nil {
 		fmt.Println("cannot open stream:", err.Error())
+		return
 	}
 
 	for {

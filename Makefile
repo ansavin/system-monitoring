@@ -18,6 +18,10 @@ grpc-client: $(SRC_CLIENT)
 	cd client && \
 	$(GO) build -o ../grpc-client
 
+.PHONY: grpc-autogen
+grpc-autogen: protobuf/system-monitor.proto
+	protoc --go_out=. --go-grpc_out=. protobuf/system-monitor.proto
+
 .PHONY: docker
 docker:
 	docker build -t system-monitor .
