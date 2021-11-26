@@ -121,8 +121,6 @@ func TestCalcDevStats(t *testing.T) {
 func TestCalcFsUtilization(t *testing.T) {
 	t.Run("simple positive test", func(t *testing.T) {
 		data, err := CalcFsUtilization()
-		// FIXME cannot open /boot/efi fs: open /boot/efi: permission denied
-		// when not in docker
 
 		require.NoError(t, err)
 		require.NotEmpty(t, data)
