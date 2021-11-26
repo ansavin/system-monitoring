@@ -13,7 +13,6 @@ COPY oslayer/go.sum ./oslayer/
 RUN go mod download
 
 COPY . ./
-RUN cd client && go build -o client && cd ..
 RUN go build -o system-monitor
 ENTRYPOINT [ "./system-monitor" ]
 CMD []

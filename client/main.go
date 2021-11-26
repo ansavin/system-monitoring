@@ -65,9 +65,9 @@ func main() {
 
 		fmt.Println("CPU statistics:")
 		fmt.Println("la:", r.CPUstats.La)
-		fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, ide: %.2f%%\n", r.CPUstats.Usr, r.CPUstats.Sys, r.CPUstats.Idle)
+		fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, idle: %.2f%%\n", r.CPUstats.Usr, r.CPUstats.Sys, r.CPUstats.Idle)
 
-		fmt.Println("Devices statistic:")
+		fmt.Println("Devices statistics:")
 		for _, dev := range r.DevStats {
 			fmt.Printf("Name: %s, Transactions per sec: %.3f, Read: %.3f Kbps, Write: %.3f Kbps\n",
 				dev.Name,
@@ -79,7 +79,7 @@ func main() {
 
 		fmt.Println("Filesystems utilization:")
 		for _, fs := range r.FsStats {
-			fmt.Printf("Name: %s, Used storage: %.3f Gb, Used storage persentage: %.2f%%, Used inodes: %.0f, Used inodes persentage: %.2f%%\n",
+			fmt.Printf("Name: %s, Used storage: %.3f Gb, Used storage percentage: %.2f%%, Used inodes: %.0f, Used inodes percentage: %.2f%%\n",
 				fs.Name,
 				fs.Bytes,
 				fs.BytesPercent,

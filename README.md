@@ -4,9 +4,8 @@ A small monitoring daemon that sends info about server's health via protobuf
 
 ## Requirements
 
-* one of the supported OS
-* docker
-* internet access (for pulling docker images)
+* one of the supported OS (MacOS, Linux)
+* Golang v1.16 or Docker (only for Linux)
 
 ## Functionality & Features
 

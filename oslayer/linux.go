@@ -83,17 +83,17 @@ func getDevStats() (map[string]devInfo, error) {
 		return nil, fmt.Errorf(
 			"cannot read %s: %s",
 			checkIfRunsInDocker()+BlockDevicesDir,
-			err.Error())
+			err.Error(),
+		)
 	}
 	for _, d := range devs {
 		name := d.Name()
-		if strings.HasPrefix(name, "loop") {
-			continue
-		}
+
 		data, err := parseDevStats(name, BlockDevicesDir)
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse dev stats: %s", err.Error())
 		}
+
 		res[name] = data
 	}
 	return res, nil
@@ -115,7 +115,7 @@ func parseDevStats(name, basePath string) (devInfo, error) {
 		&writeReq, &tmp, &writeSect, &tmp,
 		&readReq, &tmp, &readSect, &tmp, &tmp, &tmp, &tmp,
 		&dscdReq,
-	) // in go we cannot skip entry in Sscanf :(
+	)
 	if err != nil {
 		return devInfo{}, fmt.Errorf("cannot parse %s: %s", path, err.Error())
 	}
@@ -129,7 +129,7 @@ func parseDevStats(name, basePath string) (devInfo, error) {
 }
 
 // CalcDevStats returns us Read/Write per sec & transactions per sec for
-// all blk devises
+// all blk devices
 func CalcDevStats() ([]DevStats, error) {
 	res := make([]DevStats, 0)
 
@@ -177,11 +177,11 @@ func parseMounts() ([]string, error) {
 
 	rows := strings.Split(string(mounts), "\n")
 	for _, row := range rows {
-		// in go we cannot skip entry in Sscanf :(
 		_, err := fmt.Sscanf(row, "%s %s %s %s %s", &tmp, &tmp, &devType, &rootDentry, &mountPoint)
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse %s: %s", MountinfoFile, err.Error())
 		}
@@ -276,7 +276,6 @@ func parseCPUStats() (cpuInfo, error) {
 		return cpuInfo{}, fmt.Errorf("cannot read %s: %s", CPUStatsFile, err.Error())
 	}
 
-	// in go we cannot skip entry in Sscanf :(
 	_, err = fmt.Sscanf(string(cpu), "%s %f %s %f %f", &tmp, &usr, &tmp, &sys, &idle)
 	if err != nil {
 		return cpuInfo{}, fmt.Errorf("cannot parse %s: %s", CPUStatsFile, err.Error())

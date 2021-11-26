@@ -16,7 +16,7 @@ type CPUstats struct {
 	IdlePercent     float64
 }
 
-// DevStats represent block devises stats
+// DevStats represent block devices stats
 type DevStats struct {
 	Name    string
 	TransPS float64

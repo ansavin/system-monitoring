@@ -26,15 +26,26 @@ grpc-autogen: protobuf/system-monitor.proto
 docker:
 	docker build -t system-monitor .
 
-.PHONY: docker-run
-docker-run: docker
+.PHONY: docker-server
+docker-server: docker
 	docker run \
 	--rm \
 	--net="host" \
 	--pid="host" \
 	-v "/:/host:ro,rslave" \
-	--name system-monitor \
+	--name system-monitor-server \
 	system-monitor
+
+.PHONY: docker-client
+docker-client: docker
+	docker run \
+	--rm \
+	--net="host" \
+	--pid="host" \
+	--entrypoint="go" \
+	-v "/:/host:ro,rslave" \
+	--name system-monitor-client \
+	system-monitor run client/main.go 3 3
 
 .PHONY: docker-test
 docker-test: docker
@@ -49,7 +60,8 @@ docker-test: docker
 
 .PHONY: clean
 clean:
-	docker rm system-monitor 1>/dev/null 2>&1 || true
+	docker rm system-monitor-server 1>/dev/null 2>&1 || true
+	docker rm system-monitor-client 1>/dev/null 2>&1 || true
 	docker rm system-monitor-test 1>/dev/null 2>&1 || true
 	docker rmi system-monitor 1>/dev/null 2>&1 || true
 	rm -f grpc-server 1>/dev/null 2>&1
