@@ -40,6 +40,130 @@ func startPeriodicalSampling(ctx context.Context, f func()) {
 	}
 }
 
+func (s *server) getCPUStats(settings *protobuf.Settings, stats *protobuf.Stats) {
+	avgTime := float64(settings.AveragingTime)
+
+	// we should wait till enough data will be collected
+	for int(settings.AveragingTime) > (len(s.cpuStatsSamples)) {
+		time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.cpuStatsSamples)) * time.Second)
+	}
+
+	// averaging our data for client according to his settings
+	start := len(s.cpuStatsSamples) - (int(settings.AveragingTime))
+
+	cpuStats := protobuf.CPUstats{}
+
+	for _, sample := range s.cpuStatsSamples[start:] {
+		cpuStats.La += sample.LA
+		cpuStats.Sys += sample.SysUsagePercent
+		cpuStats.Usr += sample.UsrUsagePercent
+		cpuStats.Idle += sample.IdlePercent
+	}
+	cpuStats.La /= avgTime
+	cpuStats.Sys /= avgTime
+	cpuStats.Usr /= avgTime
+	cpuStats.Idle /= avgTime
+
+	stats.CPUstats = &cpuStats
+}
+
+func (s *server) getDevStats(settings *protobuf.Settings, stats *protobuf.Stats) error {
+	avgTime := float64(settings.AveragingTime)
+
+	// defensive programming: we assume slices are filled almost simultaneously
+	// but despiting that fact, we will check if slice is ok before working
+	for int(settings.AveragingTime) > (len(s.devStatsSamples)) {
+		time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.devStatsSamples)) * time.Second)
+	}
+
+	start := len(s.devStatsSamples) - (int(settings.AveragingTime))
+
+	// here we definitely should have enough data
+	if len(s.devStatsSamples[start:]) < int(settings.AveragingTime) {
+		s.cancel()
+		return status.Errorf(codes.DataLoss, "sending message error: device statistics corrupted")
+	}
+
+	// averaging our data for client according to his settings
+	// limitation: we assume device number is constant. If not, there might be an error there
+	for devIdx, dev := range s.devStatsSamples[0] {
+		devStats := protobuf.DevStats{
+			Name: dev.Name,
+		}
+
+		for _, sample := range s.devStatsSamples[start:] {
+
+			spl := sample[devIdx]
+
+			// we assume devices order is always the same, otherwise this won`t work
+			if devStats.Name != spl.Name {
+				s.cancel()
+				return status.Errorf(codes.DataLoss, "sending message error: mixing different devices stats")
+			}
+
+			devStats.Tps += spl.TransPS
+			devStats.Read += spl.ReadPS
+			devStats.Write += spl.WritePS
+		}
+
+		devStats.Tps /= avgTime
+		devStats.Read /= avgTime
+		devStats.Write /= avgTime
+
+		stats.DevStats = append(stats.DevStats, &devStats)
+	}
+	return nil
+}
+
+func (s *server) getFsStats(settings *protobuf.Settings, stats *protobuf.Stats) error {
+	avgTime := float64(settings.AveragingTime)
+
+	// defensive programming: we assume slices are filled almost simultaneously
+	// but despiting that fact, we will check if slice is ok before working
+	for int(settings.AveragingTime) > (len(s.fsStatsSamples)) {
+		time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.fsStatsSamples)) * time.Second)
+	}
+
+	start := len(s.fsStatsSamples) - (int(settings.AveragingTime))
+
+	// here we definitely should have enough data
+	if len(s.fsStatsSamples[start:]) < int(settings.AveragingTime) {
+		s.cancel()
+		return status.Errorf(codes.DataLoss, "sending message error: fs statistics corrupted")
+	}
+	// averaging our data for client according to his settings
+	// limitation: we assume device number is constant. If not, there might be an error there
+	for devIdx, dev := range s.fsStatsSamples[0] {
+		fsStats := protobuf.FsStats{
+			Name: dev.Name,
+		}
+
+		for _, sample := range s.fsStatsSamples[start:] {
+
+			spl := sample[devIdx]
+
+			// we assume fs order is always the same, otherwise this won`t work
+			if fsStats.Name != spl.Name {
+				s.cancel()
+				return status.Errorf(codes.DataLoss, "sending message error: mixing different devices stats")
+			}
+
+			fsStats.Bytes += spl.UsedGBytes
+			fsStats.BytesPercent += spl.UsedStoragePercent
+			fsStats.Inode += spl.UsedInodes
+			fsStats.InodePercent += spl.UsedInodesPercent
+		}
+
+		fsStats.Bytes /= avgTime
+		fsStats.BytesPercent /= avgTime
+		fsStats.Inode /= avgTime
+		fsStats.InodePercent /= avgTime
+
+		stats.FsStats = append(stats.FsStats, &fsStats)
+	}
+	return nil
+}
+
 // getStats implements protobuf.MonitorServer
 func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetStatsServer) error {
 	if settings.AveragingTime > maxSamples {
@@ -119,114 +243,18 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 		case <-s.ctx.Done():
 			return status.Errorf(codes.Internal, "collecting statistics error: %s", s.lastError.Error())
 		default:
-			// we should wait till enough data will be collected
-			for int(settings.AveragingTime) > (len(s.cpuStatsSamples)) {
-				time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.cpuStatsSamples)) * time.Second)
+			stats := protobuf.Stats{}
+
+			s.getCPUStats(settings, &stats)
+
+			err := s.getDevStats(settings, &stats)
+			if err != nil {
+				return err
 			}
 
-			// averaging our data for client according to his settings
-			start := len(s.cpuStatsSamples) - (int(settings.AveragingTime))
-			cpuStats := protobuf.CPUstats{}
-
-			for _, sample := range s.cpuStatsSamples[start:] {
-				cpuStats.La += sample.LA
-				cpuStats.Sys += sample.SysUsagePercent
-				cpuStats.Usr += sample.UsrUsagePercent
-				cpuStats.Idle += sample.IdlePercent
-			}
-			cpuStats.La /= float64(settings.AveragingTime)
-			cpuStats.Sys /= float64(settings.AveragingTime)
-			cpuStats.Usr /= float64(settings.AveragingTime)
-			cpuStats.Idle /= float64(settings.AveragingTime)
-
-			stats := protobuf.Stats{
-				CPUstats: &cpuStats,
-			}
-
-			// defensive programming: we assume slices are filled almost simultaneously
-			// but despiting that fact, we will check if slice is ok before working
-			for int(settings.AveragingTime) > (len(s.devStatsSamples)) {
-				time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.devStatsSamples)) * time.Second)
-			}
-
-			start = len(s.devStatsSamples) - (int(settings.AveragingTime))
-
-			// here we definitely should have enough data
-			if len(s.devStatsSamples[start:]) < int(settings.AveragingTime) {
-				s.cancel()
-				return status.Errorf(codes.DataLoss, "sending message error: device statistics corrupted")
-			}
-
-			// averaging our data for client according to his settings
-			// limitation: we assume device number is constant. If not, there might be an error there
-			for devIdx, dev := range s.devStatsSamples[0] {
-				devStats := protobuf.DevStats{
-					Name: dev.Name,
-				}
-
-				for _, sample := range s.devStatsSamples[start:] {
-
-					spl := sample[devIdx]
-
-					// we assume devices order is always the same, otherwise this won`t work
-					if devStats.Name != spl.Name {
-						s.cancel()
-						return status.Errorf(codes.DataLoss, "sending message error: mixing different devices stats")
-					}
-
-					devStats.Tps += spl.TransPS
-					devStats.Read += spl.ReadPS
-					devStats.Write += spl.WritePS
-				}
-
-				devStats.Tps /= float64(settings.AveragingTime)
-				devStats.Read /= float64(settings.AveragingTime)
-				devStats.Write /= float64(settings.AveragingTime)
-
-				stats.DevStats = append(stats.DevStats, &devStats)
-			}
-			// defensive programming: we assume slices are filled almost simultaneously
-			// but despiting that fact, we will check if slice is ok before working
-			for int(settings.AveragingTime) > (len(s.fsStatsSamples)) {
-				time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.fsStatsSamples)) * time.Second)
-			}
-
-			start = len(s.fsStatsSamples) - (int(settings.AveragingTime))
-
-			// here we definitely should have enough data
-			if len(s.fsStatsSamples[start:]) < int(settings.AveragingTime) {
-				s.cancel()
-				return status.Errorf(codes.DataLoss, "sending message error: fs statistics corrupted")
-			}
-			// averaging our data for client according to his settings
-			// limitation: we assume device number is constant. If not, there might be an error there
-			for devIdx, dev := range s.fsStatsSamples[0] {
-				fsStats := protobuf.FsStats{
-					Name: dev.Name,
-				}
-
-				for _, sample := range s.fsStatsSamples[start:] {
-
-					spl := sample[devIdx]
-
-					// we assume fs order is always the same, otherwise this won`t work
-					if fsStats.Name != spl.Name {
-						s.cancel()
-						return status.Errorf(codes.DataLoss, "sending message error: mixing different devices stats")
-					}
-
-					fsStats.Bytes += spl.UsedGBytes
-					fsStats.BytesPercent += spl.UsedStoragePercent
-					fsStats.Inode += spl.UsedInodes
-					fsStats.InodePercent += spl.UsedInodesPercent
-				}
-
-				fsStats.Bytes /= float64(settings.AveragingTime)
-				fsStats.BytesPercent /= float64(settings.AveragingTime)
-				fsStats.Inode /= float64(settings.AveragingTime)
-				fsStats.InodePercent /= float64(settings.AveragingTime)
-
-				stats.FsStats = append(stats.FsStats, &fsStats)
+			err = s.getFsStats(settings, &stats)
+			if err != nil {
+				return err
 			}
 
 			if err := srv.Send(&stats); err != nil {
