@@ -1,5 +1,8 @@
 # system-monitoring
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/ansavin/system-monitoring)](https://goreportcard.com/report/github.com/ansavin/system-monitoring)
+[![Golang-CI](https://github.com/ansavin/system-monitoring/actions/workflows/golang-ci.yml/badge.svg)](https://github.com/ansavin/system-monitoring/actions/workflows/golang-ci.yml)
+
 A small monitoring daemon that sends info about server's health via protobuf
 
 ## Requirements
