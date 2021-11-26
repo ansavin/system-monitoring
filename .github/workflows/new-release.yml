@@ -29,7 +29,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          goversion: "https://dl.google.com/go/go1.16.0.linux-amd64.tar.gz"
           project_path: "."
           binary_name: "service-monitor"
           extra_files: LICENSE README.md
@@ -39,7 +38,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          goversion: "https://dl.google.com/go/go1.16.0.linux-amd64.tar.gz"
           project_path: "./client"
           binary_name: "client"
           extra_files: LICENSE README.md
