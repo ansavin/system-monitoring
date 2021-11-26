@@ -18,7 +18,6 @@ jobs:
     - name: Build server binary
       uses: wangyoucao577/go-release-action@master
       with:
-      with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
         goarch: ${{ matrix.goarch }}
@@ -29,7 +28,6 @@ jobs:
 
     - name: Build client binary
       uses: wangyoucao577/go-release-action@master
-      with:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
