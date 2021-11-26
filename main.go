@@ -228,6 +228,8 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 				s.fsStatsSamples = s.fsStatsSamples[1:]
 			}
 			s.fsStatsSamples = append(s.fsStatsSamples, fsystems)
+
+			time.Sleep(oslayer.SamplingTime)
 		},
 	}
 

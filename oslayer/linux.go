@@ -52,7 +52,7 @@ var dockerRootFSPrefix = "/host"
 
 // ValidDeviceTypes is prefixes for non-virtual block dev in Linux mountinfo
 // See https://www.kernel.org/doc/Documentation/admin-guide/devices.txt
-var ValidDeviceTypes = []string{"3", "8", "9", "22", "33", "34"}
+var ValidDeviceTypes = []string{"3", "8", "9", "22", "33", "34", "259"}
 
 // check if code runs in docker or in host OS
 func checkIfRunsInDocker() string {
@@ -100,7 +100,7 @@ func getDevStats() (map[string]devInfo, error) {
 }
 
 func parseDevStats(name, basePath string) (devInfo, error) {
-	var tmp, dscdReq, readReq, readSect, writeReq, writeSect uint64
+	var tmp, readReq, readSect, writeReq, writeSect uint64
 
 	path := fmt.Sprintf("%s/%s/%s", basePath, name, DevStatsFilename)
 
@@ -111,17 +111,16 @@ func parseDevStats(name, basePath string) (devInfo, error) {
 		return devInfo{}, fmt.Errorf("cannot read %s: %s", path, err.Error())
 	}
 
-	_, err = fmt.Sscanf(string(dev), "%d %d %d %d %d %d %d %d %d %d %d %d",
+	_, err = fmt.Sscanf(string(dev), "%d %d %d %d %d %d %d",
 		&writeReq, &tmp, &writeSect, &tmp,
-		&readReq, &tmp, &readSect, &tmp, &tmp, &tmp, &tmp,
-		&dscdReq,
+		&readReq, &tmp, &readSect,
 	)
 	if err != nil {
 		return devInfo{}, fmt.Errorf("cannot parse %s: %s", path, err.Error())
 	}
 
 	return devInfo{
-		Transactions: dscdReq + readReq + writeReq,
+		Transactions: readReq + writeReq,
 		ReadBytes:    readSect * SectorSize,
 		WriteBytes:   writeSect * SectorSize,
 	}, nil
