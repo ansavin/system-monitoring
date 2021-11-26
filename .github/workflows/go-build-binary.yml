@@ -1,8 +1,7 @@
 name: go-build-binary
 
 on:
-  release:
-    types: [published]
+  release
 
 jobs:
   build:
