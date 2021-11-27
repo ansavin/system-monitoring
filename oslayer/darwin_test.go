@@ -11,7 +11,7 @@ import (
 
 func TestCalcCPUUsage(t *testing.T) {
 	t.Run("simple positive test", func(t *testing.T) {
-		data, err := CalcCPUUsage()
+		data, err := CalcCPUUsage("")
 
 		require.NoError(t, err)
 		require.NotEmpty(t, data)

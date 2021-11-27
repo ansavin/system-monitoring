@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net"
 	"oslayer"
 	"sync"
 	"time"
 
+	"config"
 	"protobuf"
 
 	"google.golang.org/grpc"
@@ -27,6 +29,8 @@ type server struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	lastError       error
+	rootFsPrefix    string
+	cfg             config.Cfg
 }
 
 func startPeriodicalSampling(ctx context.Context, f func()) {
@@ -70,7 +74,7 @@ func (s *server) getCPUStats(settings *protobuf.Settings, stats *protobuf.Stats)
 func (s *server) getDevStats(settings *protobuf.Settings, stats *protobuf.Stats) error {
 	avgTime := float64(settings.AveragingTime)
 
-	// defensive programming: we assume slices are filled almost simultaneously
+	// we assume slices are filled almost simultaneously
 	// but despiting that fact, we will check if slice is ok before working
 	for int(settings.AveragingTime) > (len(s.devStatsSamples)) {
 		time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.devStatsSamples)) * time.Second)
@@ -92,7 +96,6 @@ func (s *server) getDevStats(settings *protobuf.Settings, stats *protobuf.Stats)
 		}
 
 		for _, sample := range s.devStatsSamples[start:] {
-
 			spl := sample[devIdx]
 
 			// we assume devices order is always the same, otherwise this won`t work
@@ -118,7 +121,7 @@ func (s *server) getDevStats(settings *protobuf.Settings, stats *protobuf.Stats)
 func (s *server) getFsStats(settings *protobuf.Settings, stats *protobuf.Stats) error {
 	avgTime := float64(settings.AveragingTime)
 
-	// defensive programming: we assume slices are filled almost simultaneously
+	// we assume slices are filled almost simultaneously
 	// but despiting that fact, we will check if slice is ok before working
 	for int(settings.AveragingTime) > (len(s.fsStatsSamples)) {
 		time.Sleep(time.Duration(int(settings.AveragingTime)-len(s.fsStatsSamples)) * time.Second)
@@ -166,6 +169,8 @@ func (s *server) getFsStats(settings *protobuf.Settings, stats *protobuf.Stats) 
 
 // getStats implements protobuf.MonitorServer
 func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetStatsServer) error {
+	fmt.Println("got new client")
+
 	if settings.AveragingTime > maxSamples {
 		return status.Errorf(codes.Aborted, "server cannot average statistics for more then %d sec", maxSamples)
 	}
@@ -181,56 +186,70 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 	// clientData = 1, 2, 3, ... <- for client who wants data for 1 sec
 	// anotherClientData = (2 + 1) / 2, (3 + 2) / 2, ... <- for client
 	// who wants data for 2 sec
-	statsCalcFunctions := []func(){
-		func() {
-			cpu, err := oslayer.CalcCPUUsage()
-			if err != nil {
-				s.lastError = err
-				s.cancel()
-			}
+	statsCalcFunctions := []func(){}
+	if !s.cfg.DisableCPUStats {
+		statsCalcFunctions = append(
+			statsCalcFunctions,
+			func() {
+				cpu, err := oslayer.CalcCPUUsage(s.rootFsPrefix)
+				if err != nil {
+					s.lastError = err
+					s.cancel()
+				}
 
-			// here we want to preserve only maxSamples elements in slices
-			// we have no generic in go, so we cant move this to a func
-			// without overengineering
-			if len(s.cpuStatsSamples) == maxSamples {
-				s.cpuStatsSamples = s.cpuStatsSamples[1:]
-			}
-			s.cpuStatsSamples = append(s.cpuStatsSamples, cpu)
+				// here we want to preserve only maxSamples elements in slices
+				// we have no generic in go, so we cant move this to a func
+				// without overengineering
+				if len(s.cpuStatsSamples) == maxSamples {
+					s.cpuStatsSamples = s.cpuStatsSamples[1:]
+				}
+				s.cpuStatsSamples = append(s.cpuStatsSamples, cpu)
 
-			time.Sleep(oslayer.SamplingTime)
-		},
-		func() {
-			devs, err := oslayer.CalcDevStats()
-			if err != nil {
-				s.lastError = err
-				s.cancel()
-			}
+				time.Sleep(oslayer.SamplingTime)
+			},
+		)
+	}
+	if !s.cfg.DisableDevStats {
+		statsCalcFunctions = append(
+			statsCalcFunctions,
+			func() {
+				devs, err := oslayer.CalcDevStats(s.rootFsPrefix)
+				if err != nil {
+					s.lastError = err
+					s.cancel()
+				}
 
-			// here we want to preserve only maxSamples elements in slices
-			// we have no generic in go, so we cant move this to a func
-			// without overengineering
-			if len(s.devStatsSamples) == maxSamples {
-				s.devStatsSamples = s.devStatsSamples[1:]
-			}
-			s.devStatsSamples = append(s.devStatsSamples, devs)
-			// we doesn`t need to sleep here - CalcDevStats use the same SamplingTime
-			// for collecting stats
-		},
-		func() {
-			fsystems, err := oslayer.CalcFsUtilization()
-			if err != nil {
-				s.lastError = err
-				s.cancel()
-			}
-			// we have no generic in go, so we cant move this to a func
-			// without overengineering
-			if len(s.fsStatsSamples) == maxSamples {
-				s.fsStatsSamples = s.fsStatsSamples[1:]
-			}
-			s.fsStatsSamples = append(s.fsStatsSamples, fsystems)
+				// here we want to preserve only maxSamples elements in slices
+				// we have no generic in go, so we cant move this to a func
+				// without overengineering
+				if len(s.devStatsSamples) == maxSamples {
+					s.devStatsSamples = s.devStatsSamples[1:]
+				}
+				s.devStatsSamples = append(s.devStatsSamples, devs)
+				// we doesn`t need to sleep here - CalcDevStats use the same SamplingTime
+				// for collecting stats
+			},
+		)
+	}
+	if !s.cfg.DisableFsStats {
+		statsCalcFunctions = append(
+			statsCalcFunctions,
+			func() {
+				fsystems, err := oslayer.CalcFsUtilization(s.rootFsPrefix)
+				if err != nil {
+					s.lastError = err
+					s.cancel()
+				}
+				// we have no generic in go, so we cant move this to a func
+				// without overengineering
+				if len(s.fsStatsSamples) == maxSamples {
+					s.fsStatsSamples = s.fsStatsSamples[1:]
+				}
+				s.fsStatsSamples = append(s.fsStatsSamples, fsystems)
 
-			time.Sleep(oslayer.SamplingTime)
-		},
+				time.Sleep(oslayer.SamplingTime)
+			},
+		)
 	}
 
 	// statistics is calculated in separate goroutines and stored in slices
@@ -243,7 +262,9 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 	for {
 		select {
 		case <-s.ctx.Done():
-			return status.Errorf(codes.Internal, "collecting statistics error: %s", s.lastError.Error())
+			err := status.Errorf(codes.Internal, "collecting statistics error: %s", s.lastError.Error())
+			fmt.Println(err)
+			return err
 		default:
 			stats := protobuf.Stats{}
 
@@ -251,17 +272,20 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 
 			err := s.getDevStats(settings, &stats)
 			if err != nil {
-				return err
+				s.lastError = err
+				return s.lastError
 			}
 
 			err = s.getFsStats(settings, &stats)
 			if err != nil {
-				return err
+				s.lastError = err
+				return s.lastError
 			}
 
 			if err := srv.Send(&stats); err != nil {
-				s.cancel()
-				return status.Errorf(codes.Internal, "sending message error: %s", err.Error())
+				s.lastError = status.Errorf(codes.Internal, "sending message to client error: %s", err.Error())
+				fmt.Println(s.lastError)
+				return s.lastError
 			}
 			time.Sleep(time.Duration(settings.TimeBetweenTicks) * time.Second)
 		}
@@ -269,7 +293,17 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 }
 
 func main() {
-	lis, err := net.Listen("tcp", "localhost:8088")
+	port := flag.Int("p", 8088, "port at which server must start")
+	rootFsPrefix := flag.String("r", "", "path where host root FS is mounted")
+
+	flag.Parse()
+
+	cfg, err := config.NewConfig()
+	if err != nil {
+		fmt.Println("cannot create config:", err.Error())
+	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", *port))
 	if err != nil {
 		fmt.Println("cannot listen TCP:", err.Error())
 		return
@@ -288,11 +322,12 @@ func main() {
 		devStatsSamples: devStatsSamples,
 		ctx:             ctx,
 		cancel:          cancel,
+		rootFsPrefix:    *rootFsPrefix,
+		cfg:             cfg,
 	})
 	fmt.Println("server listening at", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		fmt.Println("cannot handle request:", err.Error())
-		cancel()
 		return
 	}
 }

@@ -4,7 +4,6 @@
 package oslayer
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -54,20 +53,6 @@ var dockerRootFSPrefix = "/host"
 // See https://www.kernel.org/doc/Documentation/admin-guide/devices.txt
 var ValidDeviceTypes = []string{"3", "8", "9", "22", "33", "34", "259"}
 
-// check if code runs in docker or in host OS
-func checkIfRunsInDocker() string {
-	_, err := os.Open(dockerRootFSPrefix)
-	// if /host does not exist, then we run code in host OS
-	// we does not check other errors here because in every place we call
-	// this func we will check file open errors
-	if errors.Is(err, os.ErrNotExist) {
-		return ""
-	}
-	// if /host exist, then we run in docker
-	// (we should bind-mount host / to /host in order to get info about FS)
-	return dockerRootFSPrefix
-}
-
 func percentage(x, y float64) float64 {
 	if x == 0 {
 		return 0
@@ -75,21 +60,21 @@ func percentage(x, y float64) float64 {
 	return 100 * (x - y) / x
 }
 
-func getDevStats() (map[string]devInfo, error) {
+func getDevStats(rootFsPrefix string) (map[string]devInfo, error) {
 	res := make(map[string]devInfo)
 
-	devs, err := ioutil.ReadDir(checkIfRunsInDocker() + BlockDevicesDir)
+	devs, err := ioutil.ReadDir(rootFsPrefix + BlockDevicesDir)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"cannot read %s: %s",
-			checkIfRunsInDocker()+BlockDevicesDir,
+			rootFsPrefix+BlockDevicesDir,
 			err.Error(),
 		)
 	}
 	for _, d := range devs {
 		name := d.Name()
 
-		data, err := parseDevStats(name, BlockDevicesDir)
+		data, err := parseDevStats(name, BlockDevicesDir, rootFsPrefix)
 		if err != nil {
 			return nil, fmt.Errorf("cannot parse dev stats: %s", err.Error())
 		}
@@ -99,12 +84,12 @@ func getDevStats() (map[string]devInfo, error) {
 	return res, nil
 }
 
-func parseDevStats(name, basePath string) (devInfo, error) {
+func parseDevStats(name, basePath, rootFsPrefix string) (devInfo, error) {
 	var tmp, readReq, readSect, writeReq, writeSect uint64
 
 	path := fmt.Sprintf("%s/%s/%s", basePath, name, DevStatsFilename)
 
-	prefix := checkIfRunsInDocker()
+	prefix := rootFsPrefix
 
 	dev, err := ioutil.ReadFile(prefix + path)
 	if err != nil {
@@ -129,17 +114,17 @@ func parseDevStats(name, basePath string) (devInfo, error) {
 
 // CalcDevStats returns us Read/Write per sec & transactions per sec for
 // all blk devices
-func CalcDevStats() ([]DevStats, error) {
+func CalcDevStats(rootFsPrefix string) ([]DevStats, error) {
 	res := make([]DevStats, 0)
 
-	devFirstSnapshot, err := getDevStats()
+	devFirstSnapshot, err := getDevStats(rootFsPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("cannot get dev snapshot #1: %s", err.Error())
 	}
 
 	time.Sleep(SamplingTime)
 
-	devSecondSnapshot, err := getDevStats()
+	devSecondSnapshot, err := getDevStats(rootFsPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("cannot get dev snapshot #2: %s", err.Error())
 	}
@@ -163,11 +148,11 @@ func CalcDevStats() ([]DevStats, error) {
 	return res, nil
 }
 
-func parseMounts() ([]string, error) {
+func parseMounts(rootFsPrefix string) ([]string, error) {
 	var tmp, devType, rootDentry, mountPoint string
 	res := make([]string, 0)
 
-	prefix := checkIfRunsInDocker()
+	prefix := rootFsPrefix
 
 	mounts, err := ioutil.ReadFile(prefix + MountinfoFile)
 	if err != nil {
@@ -204,18 +189,18 @@ func parseMounts() ([]string, error) {
 
 // CalcFsUtilization return storage & inodes Utilization for all
 // mounted non-virtual (like procfs) filesystems
-func CalcFsUtilization() ([]FsStats, error) {
+func CalcFsUtilization(rootFsPrefix string) ([]FsStats, error) {
 	var stats syscall.Statfs_t
 
 	res := make([]FsStats, 0)
 
-	filesystems, err := parseMounts()
+	filesystems, err := parseMounts(rootFsPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("cannot get filesystems: %s", err.Error())
 	}
 
 	for _, fs := range filesystems {
-		prefix := checkIfRunsInDocker()
+		prefix := rootFsPrefix
 
 		fd, err := os.Open(prefix + fs)
 
@@ -246,10 +231,10 @@ func CalcFsUtilization() ([]FsStats, error) {
 	return res, nil
 }
 
-func parseLA() (float64, error) {
+func parseLA(rootFsPrefix string) (float64, error) {
 	var la float64
 
-	prefix := checkIfRunsInDocker()
+	prefix := rootFsPrefix
 
 	laStats, err := ioutil.ReadFile(prefix + LaFile)
 	if err != nil {
@@ -264,11 +249,11 @@ func parseLA() (float64, error) {
 	return la, nil
 }
 
-func parseCPUStats() (cpuInfo, error) {
+func parseCPUStats(rootFsPrefix string) (cpuInfo, error) {
 	var usr, sys, idle float64
 	var tmp string
 
-	prefix := checkIfRunsInDocker()
+	prefix := rootFsPrefix
 
 	cpu, err := ioutil.ReadFile(prefix + CPUStatsFile)
 	if err != nil {
@@ -289,13 +274,13 @@ func parseCPUStats() (cpuInfo, error) {
 
 // CalcCPUUsage returns CPU utilization data like
 // load average & CPU time distribution (sys/usr/idle)
-func CalcCPUUsage() (CPUstats, error) {
-	la, err := parseLA()
+func CalcCPUUsage(rootFsPrefix string) (CPUstats, error) {
+	la, err := parseLA(rootFsPrefix)
 	if err != nil {
 		return CPUstats{}, fmt.Errorf("cannot calc cpu la: %s", err.Error())
 	}
 
-	stats, err := parseCPUStats()
+	stats, err := parseCPUStats(rootFsPrefix)
 	if err != nil {
 		return CPUstats{}, fmt.Errorf("cannot calc cpu stats: %s", err.Error())
 	}

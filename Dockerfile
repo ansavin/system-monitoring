@@ -10,6 +10,8 @@ COPY protobuf/go.mod ./protobuf/
 COPY protobuf/go.sum ./protobuf/
 COPY oslayer/go.mod ./oslayer/
 COPY oslayer/go.sum ./oslayer/
+COPY config/go.mod ./config/
+COPY config/go.sum ./config/
 RUN go mod download
 
 COPY . ./

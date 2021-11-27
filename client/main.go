@@ -2,10 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
-	"os"
-	"strconv"
 
 	"protobuf"
 
@@ -13,26 +12,26 @@ import (
 )
 
 func main() {
-	args := os.Args
+	avgTime := flag.Int("a", 3, "statistics averaging time in seconds")
+	msgTime := flag.Int("m", 3, "time between messages in seconds")
+	port := flag.Int("p", 8088, "port at which statistics server runs")
 
-	if len(args) < 3 {
-		fmt.Println("usage: ./grpc-server <time_between_messages_in_sec> <time_for_stats_averaging_is_sec>")
+	flag.Parse()
+
+	timeBetweenTicks := *msgTime
+	if timeBetweenTicks <= 0 {
+		fmt.Println("expected integer > 0 as 1-d argument, got", timeBetweenTicks)
 		return
 	}
 
-	timeBetweenTicks, err := strconv.Atoi(args[1])
-	if err != nil || timeBetweenTicks <= 0 {
-		fmt.Println("expected integer > 0 as 1-d argument, got", args[1])
-		return
-	}
-	averagingTime, err := strconv.Atoi(args[2])
-	if err != nil || averagingTime <= 0 {
-		fmt.Println("expected integer > 0 as 2-d argument, got", args[2])
+	averagingTime := *avgTime
+	if averagingTime <= 0 {
+		fmt.Println("expected integer > 0 as 2-d argument, got", averagingTime)
 		return
 	}
 
 	// changing port for startup is nit supported yet
-	conn, err := grpc.Dial("localhost:8088", grpc.WithInsecure())
+	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", *port), grpc.WithInsecure())
 	if err != nil {
 		fmt.Println("cannot connect to gRPC server:", err.Error())
 		return
@@ -64,7 +63,7 @@ func main() {
 		}
 
 		fmt.Println("CPU statistics:")
-		fmt.Println("la:", r.CPUstats.La)
+		fmt.Printf("la: %.2f\n", r.CPUstats.La)
 		fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, idle: %.2f%%\n", r.CPUstats.Usr, r.CPUstats.Sys, r.CPUstats.Idle)
 
 		fmt.Println("Devices statistics:")

@@ -13,9 +13,9 @@ A small monitoring daemon that sends info about server's health via protobuf
 ## Functionality & Features
 
 * Calculating:
-  * Load average
-  * CPU load
-  * Disks load
+  * Load average (MacOS, Linux)
+  * CPU load (MacOS, Linux)
+  * Disks load (Linux only)
 * Unit-tests
 * Integration tests
 * Simple client for daemon

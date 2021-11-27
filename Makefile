@@ -45,7 +45,7 @@ docker-client: docker
 	--entrypoint="go" \
 	-v "/:/host:ro,rslave" \
 	--name system-monitor-client \
-	system-monitor run client/main.go 3 3
+	system-monitor run client/main.go
 
 .PHONY: docker-test
 docker-test: docker

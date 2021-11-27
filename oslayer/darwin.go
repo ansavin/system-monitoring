@@ -54,7 +54,7 @@ func parseCPUStats() (cpuInfo, error) {
 
 // CalcCPUUsage returns CPU utilization data like
 // load average & CPU time distribution (sys/usr/idle)
-func CalcCPUUsage() (CPUstats, error) {
+func CalcCPUUsage(_ string) (CPUstats, error) {
 	la, err := parseLA()
 	if err != nil {
 		return CPUstats{}, fmt.Errorf("cannot calc cpu la: %s", err.Error())
@@ -76,11 +76,11 @@ func CalcCPUUsage() (CPUstats, error) {
 }
 
 // Not implemented yet
-func CalcDevStats() ([]DevStats, error) {
+func CalcDevStats(_ string) ([]DevStats, error) {
 	return nil, nil
 }
 
 // Not implemented yet
-func CalcFsUtilization() ([]FsStats, error) {
+func CalcFsUtilization(_ string) ([]FsStats, error) {
 	return nil, nil
 }
