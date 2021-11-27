@@ -34,25 +34,19 @@ A small monitoring daemon that sends info about server's health via protobuf
   `make grpc-server`
 
   And then start it with root privileges (we need them to examine FS Utilization)
-  `./grpc-sever`
+  `sudo ./grpc-sever`
 
 * To run a client locally, type
   `make grpc-server`
 
   And then start it:
-  `./grpc-sever 3 5`
-  where 3 - is time between messages with statistics,
-  5 - averaging statistics time
+  `./grpc-sever`
 
 * To run a service in docker, type
-  `make docker-run`
-  where 3 - is time between messages with statistics,
-  5 - averaging statistics time
+  `make docker-server`
 
 * To run a client in docker, after server startup type
-  `docker exec -it system-monitor ./client/client 3 5`
-  where 3 - is time between messages with statistics,
-  5 - averaging statistics time
+  `make docker-client`
 
 ## Developing
 
@@ -64,6 +58,3 @@ A small monitoring daemon that sends info about server's health via protobuf
 
 * To run unit tests locally, type
   `make test`
-
-* To run unit tests in docker, type
-  `make docker-test`
