@@ -5,9 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"oslayer"
 	"sync"
 	"time"
+
+	"oslayer"
 
 	"config"
 	"protobuf"
@@ -268,18 +269,24 @@ func (s *server) GetStats(settings *protobuf.Settings, srv protobuf.Monitor_GetS
 		default:
 			stats := protobuf.Stats{}
 
-			s.getCPUStats(settings, &stats)
-
-			err := s.getDevStats(settings, &stats)
-			if err != nil {
-				s.lastError = err
-				return s.lastError
+			if !s.cfg.DisableCPUStats {
+				s.getCPUStats(settings, &stats)
 			}
 
-			err = s.getFsStats(settings, &stats)
-			if err != nil {
-				s.lastError = err
-				return s.lastError
+			if !s.cfg.DisableDevStats {
+				err := s.getDevStats(settings, &stats)
+				if err != nil {
+					s.lastError = err
+					return s.lastError
+				}
+			}
+
+			if !s.cfg.DisableFsStats {
+				err := s.getFsStats(settings, &stats)
+				if err != nil {
+					s.lastError = err
+					return s.lastError
+				}
 			}
 
 			if err := srv.Send(&stats); err != nil {

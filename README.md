@@ -28,24 +28,61 @@ A small monitoring daemon that sends info about server's health via protobuf
 * Fedora 34
 * MacOS 11
 
+## Building
+
+### Locally
+
+* To build server, type
+  `make grpc-server`
+
+* To build a client, type
+  `make grpc-client`
+
+### Docker
+
+* To build server docker image, type
+  `make docker`
+
+## Configuring
+
+### Server
+
+* To disable grabbing & sending statistics, edit `config.yml`
+
+* To run server on different port, use `-p` option:
+  `sudo ./grpc-server -p 8089`
+
+* All CLI options are available by running server with `-h` option
+
+### Client
+
+* To run client on different port, use `-p` option (default port is `8088`):
+  `sudo ./grpc-client -p 8089`
+
+* To get data averaged for, for example, 5 seconds, use `-a` option (default is 3 sec):
+  `sudo ./grpc-client -a 5`
+
+* To get messages from server every, for example, 4 seconds, use `-m` option (default is 3 sec):
+  `sudo ./grpc-client -m 4`
+
+* All CLI options are available by running server with `-h` option
+
 ## Running
 
-* To run server locally, type
-  `make grpc-server`
+### Directly
 
-  And then start it with root privileges (we need them to examine FS Utilization)
-  `sudo ./grpc-sever`
+* To run a server, build a server binary and start it with root privileges (we need them to examine FS Utilization)
+  `sudo ./grpc-server`
 
-* To run a client locally, type
-  `make grpc-server`
+* To run a client, build a client binary and then start it:
+  `./grpc-client`
 
-  And then start it:
-  `./grpc-sever`
+### In Docker
 
 * To run a service in docker, type
   `make docker-server`
 
-* To run a client in docker, after server startup type
+* To run a client in docker, type
   `make docker-client`
 
 ## Developing
