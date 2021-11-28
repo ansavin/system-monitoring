@@ -34,7 +34,7 @@ docker-server: docker
 	--pid="host" \
 	-v "/:/host:ro,rslave" \
 	--name system-monitor-server \
-	system-monitor
+	system-monitor -r /host
 
 .PHONY: docker-client
 docker-client: docker
