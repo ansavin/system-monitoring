@@ -59,8 +59,8 @@ A small monitoring daemon that sends info about server's health via protobuf
 * To run client on different port, use `-p` option (default port is `8088`):
   `sudo ./grpc-client -p 8089`
 
-* To get data averaged for, for example, 5 seconds, use `-a` option (default is 3 sec):
-  `sudo ./grpc-client -a 5`
+* To get data averaged for, for example, 5 seconds, use `-n` option (default is 3 sec):
+  `sudo ./grpc-client -n 5`
 
 * To get messages from server every, for example, 4 seconds, use `-m` option (default is 3 sec):
   `sudo ./grpc-client -m 4`

@@ -6,7 +6,7 @@ CLNT_LOG_FILE=$(mktemp)
 SRV_LOG_FILE=$(mktemp)
 
 # we should wait before we can get stats from client output 
-WAIT_TIME=5
+WAIT_TIME=10
 
 # non-default port for test 3
 PORT=8087
@@ -26,7 +26,7 @@ SRV_PID=$!
 
 # test 1: service runs with defaults
 
-sleep 1
+sleep 2
 
 ./grpc-client 1> $CLNT_LOG_FILE 2>&1 &
 
@@ -44,6 +44,7 @@ then
     CODE=0
 else
     echo 'Test 1 failed: no expected words "CPU statistics:" found in client`s output or error happens'
+    kill $SRV_PID $CLNT_PID
     echo 'Client output:'
     cat $CLNT_LOG_FILE
     echo 'Server output:'
@@ -60,7 +61,7 @@ kill $CLNT_PID
 WAIT_TIME=2
 AVERAGING_TIME=2
 
-./grpc-client -m $WAIT_TIME -a $AVERAGING_TIME 1> $CLNT_LOG_FILE 2>&1 &
+./grpc-client -n $WAIT_TIME -m $AVERAGING_TIME 1> $CLNT_LOG_FILE 2>&1 &
 
 CLNT_PID=$!
 
@@ -74,6 +75,7 @@ then
     CODE=0
 else
     echo 'Test 2 failed: no expected words "CPU statistics:" found in client`s output or error happens'
+    kill $SRV_PID $CLNT_PID
     echo 'Client output:'
     cat $CLNT_LOG_FILE
     echo 'Sevrer output:'
@@ -86,7 +88,7 @@ KILL_CODE=$?
 
 # test 3: server works fine with disabled statistics & using non-default port
 
-WAIT_TIME=5
+WAIT_TIME=10
 
 echo "DisableCPUStats: false
 DisableDevStats: true
@@ -96,7 +98,7 @@ DisableFsStats: true" > config.yml
 
 SRV_PID=$!
 
-sleep 1
+sleep 2
 
 ./grpc-client -p $PORT 1> $CLNT_LOG_FILE 2>&1 &
 
@@ -114,6 +116,7 @@ then
     CODE=0
 else
     echo 'Test 3 failed: unexpected client`s output or error happens'
+    kill $SRV_PID $CLNT_PID
     echo 'Client output:'
     cat $CLNT_LOG_FILE
     echo 'Sevrer output:'

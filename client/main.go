@@ -12,25 +12,24 @@ import (
 )
 
 func main() {
-	avgTime := flag.Int("a", 3, "statistics averaging time in seconds")
-	msgTime := flag.Int("m", 3, "time between messages in seconds")
+	m := flag.Int("m", 3, "statistics averaging time in seconds")
+	n := flag.Int("n", 3, "time between messages in seconds")
 	port := flag.Int("p", 8088, "port at which statistics server runs")
 
 	flag.Parse()
 
-	timeBetweenTicks := *msgTime
+	timeBetweenTicks := *n
 	if timeBetweenTicks <= 0 {
 		fmt.Println("expected integer > 0 as 1-d argument, got", timeBetweenTicks)
 		return
 	}
 
-	averagingTime := *avgTime
+	averagingTime := *m
 	if averagingTime <= 0 {
 		fmt.Println("expected integer > 0 as 2-d argument, got", averagingTime)
 		return
 	}
 
-	// changing port for startup is nit supported yet
 	conn, err := grpc.Dial(fmt.Sprintf("localhost:%d", *port), grpc.WithInsecure())
 	if err != nil {
 		fmt.Println("cannot connect to gRPC server:", err.Error())
@@ -64,11 +63,11 @@ func main() {
 
 		fmt.Println("CPU statistics:")
 		fmt.Printf("la: %.2f\n", r.CPUstats.La)
-		fmt.Printf("CPU usr: %.2f%%, sys: %.2f%%, idle: %.2f%%\n", r.CPUstats.Usr, r.CPUstats.Sys, r.CPUstats.Idle)
+		fmt.Printf("CPU user_mode: %.2f%%, system_mode: %.2f%%, idle: %.2f%%\n", r.CPUstats.Usr, r.CPUstats.Sys, r.CPUstats.Idle)
 
 		fmt.Println("Devices statistics:")
 		for _, dev := range r.DevStats {
-			fmt.Printf("Name: %s, Transactions per sec: %.3f, Read: %.3f Kbps, Write: %.3f Kbps\n",
+			fmt.Printf("Name: %s, TPS(transactions per sec): %.3f, Read: %.3f KB/s, Write: %.3f KB/s\n",
 				dev.Name,
 				dev.Tps,
 				dev.Read,

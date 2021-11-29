@@ -51,7 +51,6 @@ var dockerRootFSPrefix = "/host"
 
 // ValidDeviceTypes is prefixes for non-virtual block dev in Linux mountinfo
 // See https://www.kernel.org/doc/Documentation/admin-guide/devices.txt
-var ValidDeviceTypes = []string{"3", "8", "9", "22", "33", "34", "259"}
 
 func percentage(x, y float64) float64 {
 	if x == 0 {
@@ -175,14 +174,7 @@ func parseMounts(rootFsPrefix string) ([]string, error) {
 			continue
 		}
 
-		// we check if FS here is not virtual (for ex., sysfs)
-		// we doesn't want to check storage for such a FS
-		for _, prefix := range ValidDeviceTypes {
-			if strings.HasPrefix(devType, prefix+":") {
-				res = append(res, mountPoint)
-				break
-			}
-		}
+		res = append(res, mountPoint)
 	}
 	return res, nil
 }
@@ -203,12 +195,15 @@ func CalcFsUtilization(rootFsPrefix string) ([]FsStats, error) {
 		prefix := rootFsPrefix
 
 		fd, err := os.Open(prefix + fs)
-
+		if os.IsPermission(err) {
+			continue
+		}
 		if err != nil {
 			fd.Close()
 			return nil, fmt.Errorf("cannot open %s fs: %s", fs, err.Error())
 		}
 		err = syscall.Fstatfs(int(fd.Fd()), &stats)
+
 		if err != nil {
 			fd.Close()
 			return nil, fmt.Errorf("syscall statfs returns error: %s", err.Error())
@@ -275,22 +270,38 @@ func parseCPUStats(rootFsPrefix string) (cpuInfo, error) {
 // CalcCPUUsage returns CPU utilization data like
 // load average & CPU time distribution (sys/usr/idle)
 func CalcCPUUsage(rootFsPrefix string) (CPUstats, error) {
-	la, err := parseLA(rootFsPrefix)
+	laFirstSnapshot, err := parseLA(rootFsPrefix)
 	if err != nil {
-		return CPUstats{}, fmt.Errorf("cannot calc cpu la: %s", err.Error())
+		return CPUstats{}, fmt.Errorf("cannot get cpu la first snapshot: %s", err.Error())
 	}
 
-	stats, err := parseCPUStats(rootFsPrefix)
+	statsFirstSnapshot, err := parseCPUStats(rootFsPrefix)
 	if err != nil {
-		return CPUstats{}, fmt.Errorf("cannot calc cpu stats: %s", err.Error())
+		return CPUstats{}, fmt.Errorf("cannot get cpu stats first snapshot: %s", err.Error())
 	}
 
-	tot := (stats.usr + stats.sys + stats.idle) / 100
+	time.Sleep(SamplingTime)
+
+	laSecondSnapshot, err := parseLA(rootFsPrefix)
+	if err != nil {
+		return CPUstats{}, fmt.Errorf("cannot get cpu la second snapshot: %s", err.Error())
+	}
+
+	statsSecondSnapshot, err := parseCPUStats(rootFsPrefix)
+	if err != nil {
+		return CPUstats{}, fmt.Errorf("cannot calc cpu stats second snapshot: %s", err.Error())
+	}
+
+	usr := statsSecondSnapshot.usr - statsFirstSnapshot.usr
+	sys := statsSecondSnapshot.sys - statsFirstSnapshot.sys
+	idle := statsSecondSnapshot.idle - statsFirstSnapshot.idle
+
+	tot := (usr + sys + idle) / 100
 
 	return CPUstats{
-		LA:              la,
-		UsrUsagePercent: stats.usr / tot,
-		SysUsagePercent: stats.sys / tot,
-		IdlePercent:     stats.idle / tot,
+		LA:              (laFirstSnapshot + laSecondSnapshot) / 2,
+		UsrUsagePercent: usr / tot,
+		SysUsagePercent: sys / tot,
+		IdlePercent:     idle / tot,
 	}, nil
 }
