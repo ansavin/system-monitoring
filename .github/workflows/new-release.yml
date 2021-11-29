@@ -1,0 +1,43 @@
+
+name: new-release
+
+on:
+  push:
+    tags:
+     - 'v*'
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Go code
+        uses: actions/checkout@v2
+      - name: Create Application Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+      - name: Build server binary
+        uses: wangyoucao577/go-release-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          project_path: "."
+          binary_name: "service-monitor"
+          extra_files: LICENSE README.md
+      - name: Build client binary
+        uses: wangyoucao577/go-release-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          project_path: "./client"
+          binary_name: "client"
+          extra_files: LICENSE README.md
